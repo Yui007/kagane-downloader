@@ -1,0 +1,7 @@
+undetected-chromedriver
+typer
+rich
+pillow
+img2pdf
+PyQt6
+PyQt6-QML
