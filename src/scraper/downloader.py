@@ -28,6 +28,7 @@ class ChapterDownloader:
         download_dir: Path, 
         image_load_delay: int = 15,
         max_concurrent_chapters: int = 3,
+        max_concurrent_images: int = 5,
         max_retries: int = 3
     ):
         self.browser = browser_manager
@@ -35,6 +36,7 @@ class ChapterDownloader:
         self.download_dir = download_dir
         self.image_load_delay = image_load_delay
         self.max_concurrent_chapters = max_concurrent_chapters
+        self.max_concurrent_images = max_concurrent_images
         self.max_retries = max_retries
     
     @staticmethod
@@ -248,7 +250,7 @@ class ChapterDownloader:
         total_pages: int,
         progress_callback: Optional[Callable[[int, int], None]] = None
     ) -> int:
-        """Extract all images at once using JavaScript - NO SCROLLING - with retry for failed images"""
+        """Extract all images at once using JavaScript - with concurrent saving"""
         
         # JavaScript to extract specific pages (or all if no specific pages provided)
         def get_extraction_script(specific_pages: list[int] | None = None):
@@ -323,36 +325,51 @@ class ChapterDownloader:
                 return results;
                 """
         
+        def save_image(result: dict) -> tuple[int, bool]:
+            """Save a single image - for concurrent execution"""
+            page_num = result.get('page', 0)
+            data_url = result.get('data')
+            
+            if not data_url:
+                return (page_num, False)
+            
+            match = re.match(r'data:image/(\w+);base64,(.+)', data_url)
+            if not match:
+                return (page_num, False)
+            
+            ext = match.group(1)
+            if ext == 'jpeg':
+                ext = 'jpg'
+            b64_data = match.group(2)
+            
+            try:
+                image_path = chapter_dir / f"{page_num:03d}.{ext}"
+                with open(image_path, "wb") as f:
+                    f.write(base64.b64decode(b64_data))
+                return (page_num, True)
+            except Exception:
+                return (page_num, False)
+        
         saved_pages = set()
         failed_pages = []
         retry_delays = [2, 5, 10]  # Increasing delays for retries
         
         try:
-            # First attempt - extract all images
+            # First attempt - extract all images from browser
             results = self.driver.execute_script(get_extraction_script())
             
-            for result in results:
-                page_num = result.get('page', 0)
-                data_url = result.get('data')
+            # Save images concurrently using ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=self.max_concurrent_images) as executor:
+                futures = {executor.submit(save_image, result): result for result in results}
                 
-                if data_url:
-                    match = re.match(r'data:image/(\w+);base64,(.+)', data_url)
-                    if match:
-                        ext = match.group(1)
-                        if ext == 'jpeg':
-                            ext = 'jpg'
-                        b64_data = match.group(2)
-                        
-                        image_path = chapter_dir / f"{page_num:03d}.{ext}"
-                        with open(image_path, "wb") as f:
-                            f.write(base64.b64decode(b64_data))
-                        
+                for future in as_completed(futures):
+                    page_num, success = future.result()
+                    if success:
                         saved_pages.add(page_num)
-                        
                         if progress_callback:
                             progress_callback(len(saved_pages), total_pages)
-                else:
-                    failed_pages.append(page_num)
+                    else:
+                        failed_pages.append(page_num)
             
             # Retry failed pages
             for retry_attempt in range(self.max_retries):
@@ -367,28 +384,19 @@ class ChapterDownloader:
                 retry_results = self.driver.execute_script(get_extraction_script(failed_pages))
                 
                 still_failed = []
-                for result in retry_results:
-                    page_num = result.get('page', 0)
-                    data_url = result.get('data')
+                
+                # Save retry images concurrently
+                with ThreadPoolExecutor(max_workers=self.max_concurrent_images) as executor:
+                    futures = {executor.submit(save_image, result): result for result in retry_results}
                     
-                    if data_url:
-                        match = re.match(r'data:image/(\w+);base64,(.+)', data_url)
-                        if match:
-                            ext = match.group(1)
-                            if ext == 'jpeg':
-                                ext = 'jpg'
-                            b64_data = match.group(2)
-                            
-                            image_path = chapter_dir / f"{page_num:03d}.{ext}"
-                            with open(image_path, "wb") as f:
-                                f.write(base64.b64decode(b64_data))
-                            
+                    for future in as_completed(futures):
+                        page_num, success = future.result()
+                        if success:
                             saved_pages.add(page_num)
-                            
                             if progress_callback:
                                 progress_callback(len(saved_pages), total_pages)
-                    else:
-                        still_failed.append(page_num)
+                        else:
+                            still_failed.append(page_num)
                 
                 failed_pages = still_failed
             

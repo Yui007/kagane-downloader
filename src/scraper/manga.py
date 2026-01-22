@@ -80,58 +80,160 @@ class MangaScraper:
             original_window = self.driver.current_window_handle
             original_tab_count = len(self.driver.window_handles)
             
-            # Find the dropdown button (shows "20" by default)
-            dropdown_button = WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[role='combobox']"))
-            )
+            # Try multiple selectors for the dropdown button
+            dropdown_selectors = [
+                "button[role='combobox']",
+                "button[data-slot='select-trigger']",
+                "button[aria-haspopup='listbox']",
+                "[data-radix-select-trigger]",
+            ]
             
-            # Click to open dropdown
-            dropdown_button.click()
-            time.sleep(0.5)
+            dropdown_button = None
+            for selector in dropdown_selectors:
+                try:
+                    dropdown_button = WebDriverWait(self.driver, 3).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
+                    )
+                    if dropdown_button:
+                        break
+                except TimeoutException:
+                    continue
             
-            # Close any new tabs that may have opened
-            if len(self.driver.window_handles) > original_tab_count:
-                for handle in self.driver.window_handles:
-                    if handle != original_window:
-                        self.driver.switch_to.window(handle)
-                        self.driver.close()
-                self.driver.switch_to.window(original_window)
-                time.sleep(0.3)
-                # Click dropdown again since new tab disrupted it
-                dropdown_button.click()
-                time.sleep(0.5)
-            
-            # Find and click the "All" option
-            try:
-                all_option = self.driver.find_element(By.XPATH, 
-                    "//*[@role='option' and (text()='All' or .//span[text()='All'] or contains(text(), 'All'))]"
-                )
-                all_option.click()
-            except Exception:
-                # Try clicking by JavaScript
-                self.driver.execute_script("""
-                    const options = document.querySelectorAll('[role="option"]');
-                    for (const opt of options) {
-                        if (opt.textContent.trim() === 'All' || opt.textContent.includes('All')) {
-                            opt.click();
-                            return;
+            if not dropdown_button:
+                # Try JavaScript to find the dropdown
+                dropdown_button = self.driver.execute_script("""
+                    // Look for a button that shows chapter count options like "20", "50", etc.
+                    const buttons = document.querySelectorAll('button');
+                    for (const btn of buttons) {
+                        const text = btn.textContent.trim();
+                        if (/^\\d+$/.test(text) && ['10', '20', '50', '100'].includes(text)) {
+                            return btn;
                         }
                     }
+                    return null;
                 """)
             
-            # Wait for chapter list to reload
-            time.sleep(1)
+            if dropdown_button:
+                # Scroll to dropdown and click
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", dropdown_button)
+                time.sleep(0.3)
+                
+                # Click to open dropdown
+                try:
+                    dropdown_button.click()
+                except Exception:
+                    self.driver.execute_script("arguments[0].click();", dropdown_button)
+                
+                time.sleep(0.5)
+                
+                # Close any new tabs that may have opened
+                if len(self.driver.window_handles) > original_tab_count:
+                    for handle in self.driver.window_handles:
+                        if handle != original_window:
+                            self.driver.switch_to.window(handle)
+                            self.driver.close()
+                    self.driver.switch_to.window(original_window)
+                    time.sleep(0.3)
+                    # Click dropdown again since new tab disrupted it
+                    try:
+                        dropdown_button.click()
+                    except Exception:
+                        self.driver.execute_script("arguments[0].click();", dropdown_button)
+                    time.sleep(0.5)
+                
+                # Find and click the "All" option using multiple methods
+                all_clicked = self.driver.execute_script("""
+                    // Method 1: Look for role="option" with All text
+                    const options = document.querySelectorAll('[role="option"], [role="menuitem"], [data-radix-select-item]');
+                    for (const opt of options) {
+                        const text = opt.textContent.trim();
+                        if (text === 'All' || text === 'all' || text.toLowerCase().includes('all')) {
+                            opt.click();
+                            return true;
+                        }
+                    }
+                    
+                    // Method 2: Look in any dropdown/listbox container
+                    const listboxes = document.querySelectorAll('[role="listbox"], [data-radix-select-content]');
+                    for (const listbox of listboxes) {
+                        const items = listbox.querySelectorAll('*');
+                        for (const item of items) {
+                            if (item.textContent.trim() === 'All') {
+                                item.click();
+                                return true;
+                            }
+                        }
+                    }
+                    
+                    // Method 3: Look for any visible element with "All" text
+                    const allElements = document.evaluate(
+                        "//*[normalize-space(text())='All']",
+                        document,
+                        null,
+                        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+                        null
+                    );
+                    for (let i = 0; i < allElements.snapshotLength; i++) {
+                        const el = allElements.snapshotItem(i);
+                        if (el.offsetParent !== null) {  // Check if visible
+                            el.click();
+                            return true;
+                        }
+                    }
+                    
+                    return false;
+                """)
+                
+                # Wait for chapter list to reload
+                time.sleep(2)
+                
+                # Close any new tabs again
+                if len(self.driver.window_handles) > original_tab_count:
+                    for handle in self.driver.window_handles:
+                        if handle != original_window:
+                            self.driver.switch_to.window(handle)
+                            self.driver.close()
+                    self.driver.switch_to.window(original_window)
             
-            # Close any new tabs again
-            if len(self.driver.window_handles) > original_tab_count:
-                for handle in self.driver.window_handles:
-                    if handle != original_window:
-                        self.driver.switch_to.window(handle)
-                        self.driver.close()
-                self.driver.switch_to.window(original_window)
+            # Fallback: If dropdown didn't work, try scrolling to load all chapters
+            if not dropdown_button:
+                self._scroll_to_load_all_chapters()
             
         except TimeoutException:
-            pass
+            self._scroll_to_load_all_chapters()
+        except Exception:
+            self._scroll_to_load_all_chapters()
+    
+    def _scroll_to_load_all_chapters(self) -> None:
+        """Fallback: scroll down to trigger lazy loading of chapters"""
+        try:
+            # Find the chapter container
+            chapter_container = self.driver.find_element(By.CSS_SELECTOR, "div.divide-y")
+            
+            last_chapter_count = 0
+            max_scrolls = 20
+            scroll_count = 0
+            
+            while scroll_count < max_scrolls:
+                # Count current chapters
+                current_chapters = len(self.driver.find_elements(By.CSS_SELECTOR, "div[id^='chapter-']"))
+                
+                if current_chapters == last_chapter_count:
+                    # No new chapters loaded, stop scrolling
+                    break
+                
+                last_chapter_count = current_chapters
+                
+                # Scroll to bottom of chapter container
+                self.driver.execute_script("""
+                    const container = arguments[0];
+                    container.scrollTop = container.scrollHeight;
+                    window.scrollTo(0, document.body.scrollHeight);
+                """, chapter_container)
+                
+                time.sleep(0.5)
+                scroll_count += 1
+                
         except Exception:
             pass
     

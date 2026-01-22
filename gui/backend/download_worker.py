@@ -48,6 +48,7 @@ class DownloadWorker(QThread):
                 download_dir,
                 config.image_load_delay,
                 max_concurrent_chapters=config.max_concurrent_chapters,
+                max_concurrent_images=config.max_concurrent_images,
                 max_retries=config.max_retries
             )
             

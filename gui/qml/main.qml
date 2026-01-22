@@ -689,6 +689,26 @@ ApplicationWindow {
                         }
                     }
                     
+                    // Max Concurrent Images
+                    ColumnLayout {
+                        spacing: 8
+                        
+                        Text {
+                            text: "Max Concurrent Image Downloads: " + settings.maxConcurrentImages
+                            font.pixelSize: 14
+                            color: "#a0a0a0"
+                        }
+                        
+                        Slider {
+                            from: 1
+                            to: 10
+                            stepSize: 1
+                            value: settings.maxConcurrentImages
+                            onValueChanged: settings.maxConcurrentImages = value
+                            Layout.preferredWidth: 300
+                        }
+                    }
+                    
                     // Image Load Delay
                     ColumnLayout {
                         spacing: 8
