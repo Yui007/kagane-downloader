@@ -253,6 +253,7 @@ class ChapterDownloader:
         """Extract all images at once using JavaScript - with concurrent saving"""
         
         # JavaScript to extract specific pages (or all if no specific pages provided)
+        # This fetches blob URLs directly to preserve original format (webp/jpg) instead of re-encoding to PNG
         def get_extraction_script(specific_pages: list[int] | None = None):
             if specific_pages:
                 pages_js = str(specific_pages)
@@ -261,68 +262,124 @@ class ChapterDownloader:
                 const containers = document.querySelectorAll('div.page-container[data-page]');
                 const results = [];
                 
-                for (const container of containers) {{
-                    const pageNum = parseInt(container.getAttribute('data-page'));
-                    if (!targetPages.includes(pageNum)) continue;
-                    
-                    const img = container.querySelector('img');
-                    
-                    if (img && img.src) {{
-                        try {{
-                            const canvas = document.createElement('canvas');
-                            canvas.width = img.naturalWidth || img.width;
-                            canvas.height = img.naturalHeight || img.height;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0);
-                            const dataUrl = canvas.toDataURL('image/png');
-                            results.push({{
-                                page: pageNum,
-                                data: dataUrl
-                            }});
-                        }} catch (e) {{
-                            results.push({{
-                                page: pageNum,
-                                data: null,
-                                error: e.message
-                            }});
+                async function extractImages() {{
+                    for (const container of containers) {{
+                        const pageNum = parseInt(container.getAttribute('data-page'));
+                        if (!targetPages.includes(pageNum)) continue;
+                        
+                        const img = container.querySelector('img');
+                        
+                        if (img && img.src) {{
+                            try {{
+                                // Try to fetch blob URL directly to preserve original format
+                                if (img.src.startsWith('blob:')) {{
+                                    const response = await fetch(img.src);
+                                    const blob = await response.blob();
+                                    const mimeType = blob.type || 'image/png';
+                                    
+                                    // Convert blob to base64
+                                    const reader = new FileReader();
+                                    const dataUrl = await new Promise((resolve, reject) => {{
+                                        reader.onloadend = () => resolve(reader.result);
+                                        reader.onerror = reject;
+                                        reader.readAsDataURL(blob);
+                                    }});
+                                    
+                                    results.push({{
+                                        page: pageNum,
+                                        data: dataUrl
+                                    }});
+                                }} else {{
+                                    // Fallback: fetch the image URL directly
+                                    const response = await fetch(img.src);
+                                    const blob = await response.blob();
+                                    
+                                    const reader = new FileReader();
+                                    const dataUrl = await new Promise((resolve, reject) => {{
+                                        reader.onloadend = () => resolve(reader.result);
+                                        reader.onerror = reject;
+                                        reader.readAsDataURL(blob);
+                                    }});
+                                    
+                                    results.push({{
+                                        page: pageNum,
+                                        data: dataUrl
+                                    }});
+                                }}
+                            }} catch (e) {{
+                                results.push({{
+                                    page: pageNum,
+                                    data: null,
+                                    error: e.message
+                                }});
+                            }}
                         }}
                     }}
+                    return results;
                 }}
                 
-                return results;
+                return extractImages();
                 """
             else:
                 return """
                 const containers = document.querySelectorAll('div.page-container[data-page]');
                 const results = [];
                 
-                for (const container of containers) {
-                    const pageNum = container.getAttribute('data-page');
-                    const img = container.querySelector('img');
-                    
-                    if (img && img.src) {
-                        try {
-                            const canvas = document.createElement('canvas');
-                            canvas.width = img.naturalWidth || img.width;
-                            canvas.height = img.naturalHeight || img.height;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0);
-                            const dataUrl = canvas.toDataURL('image/png');
-                            results.push({
-                                page: parseInt(pageNum),
-                                data: dataUrl
-                            });
-                        } catch (e) {
-                            results.push({
-                                page: parseInt(pageNum),
-                                data: null,
-                                error: e.message
-                            });
+                async function extractImages() {
+                    for (const container of containers) {
+                        const pageNum = container.getAttribute('data-page');
+                        const img = container.querySelector('img');
+                        
+                        if (img && img.src) {
+                            try {
+                                // Try to fetch blob URL directly to preserve original format
+                                if (img.src.startsWith('blob:')) {
+                                    const response = await fetch(img.src);
+                                    const blob = await response.blob();
+                                    const mimeType = blob.type || 'image/png';
+                                    
+                                    // Convert blob to base64
+                                    const reader = new FileReader();
+                                    const dataUrl = await new Promise((resolve, reject) => {
+                                        reader.onloadend = () => resolve(reader.result);
+                                        reader.onerror = reject;
+                                        reader.readAsDataURL(blob);
+                                    });
+                                    
+                                    results.push({
+                                        page: parseInt(pageNum),
+                                        data: dataUrl
+                                    });
+                                } else {
+                                    // Fallback: fetch the image URL directly
+                                    const response = await fetch(img.src);
+                                    const blob = await response.blob();
+                                    
+                                    const reader = new FileReader();
+                                    const dataUrl = await new Promise((resolve, reject) => {
+                                        reader.onloadend = () => resolve(reader.result);
+                                        reader.onerror = reject;
+                                        reader.readAsDataURL(blob);
+                                    });
+                                    
+                                    results.push({
+                                        page: parseInt(pageNum),
+                                        data: dataUrl
+                                    });
+                                }
+                            } catch (e) {
+                                results.push({
+                                    page: parseInt(pageNum),
+                                    data: null,
+                                    error: e.message
+                                });
+                            }
                         }
                     }
+                    return results;
                 }
                 
-                return results;
+                return extractImages();
                 """
         
         def save_image(result: dict) -> tuple[int, bool]:
