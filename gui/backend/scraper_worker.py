@@ -10,6 +10,7 @@ from PyQt6.QtCore import QThread, pyqtSignal, QObject
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.scraper import BrowserManager, MangaScraper, MangaInfo
+from config import get_config
 
 
 class ScraperWorker(QThread):
@@ -30,7 +31,8 @@ class ScraperWorker(QThread):
         try:
             self.progress.emit("Initializing browser...")
             self._browser = BrowserManager()
-            self._browser.init_browser()
+            config = get_config()
+            self._browser.init_browser(headless=config.headless_mode)
             
             self.progress.emit("Loading manga page...")
             scraper = MangaScraper(self._browser)

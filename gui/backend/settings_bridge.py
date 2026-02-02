@@ -117,6 +117,16 @@ class SettingsBridge(QObject):
         self._config.max_retries = value
         self._save()
     
+    # Headless Mode
+    @pyqtProperty(bool, notify=settingsChanged)
+    def headlessMode(self):
+        return self._config.headless_mode
+    
+    @headlessMode.setter
+    def headlessMode(self, value):
+        self._config.headless_mode = value
+        self._save()
+
     @pyqtSlot()
     def reload(self):
         """Reload settings from file"""
