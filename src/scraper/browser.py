@@ -85,7 +85,7 @@ class BrowserManager:
         self._browser_pid = None
         self._chromedriver_pid = None
     
-    def init_browser(self) -> uc.Chrome:
+    def init_browser(self, headless: bool = True) -> uc.Chrome:
         """Initialize browser with undetected-chromedriver"""
         # Close any existing browser first
         if self.driver:
@@ -95,16 +95,17 @@ class BrowserManager:
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--window-size=1920,1080')
-        options.add_argument('--non-headless=new')
+        if headless:
+            options.add_argument('--headless=new')
         
         # Auto-detect Chrome version for compatibility
         chrome_version = get_chrome_version()
         if chrome_version:
             console.print(f"[dim]Detected Chrome version: {chrome_version}[/]")
-            self.driver = uc.Chrome(options=options, use_subprocess=True, version_main=chrome_version)
+            self.driver = uc.Chrome(options=options, use_subprocess=True, version_main=chrome_version, headless=headless)
         else:
             # Let undetected-chromedriver try its own detection
-            self.driver = uc.Chrome(options=options, use_subprocess=True)
+            self.driver = uc.Chrome(options=options, use_subprocess=True, headless=headless)
         
         # Track PIDs for cleanup
         try:

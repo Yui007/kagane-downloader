@@ -41,6 +41,9 @@ class Config:
     
     # Max retries for failed image downloads
     max_retries: int = 3
+
+    # Run browser in headless mode (hidden) or visible
+    headless_mode: bool = False
     
     def save(self) -> None:
         """Save configuration to file"""

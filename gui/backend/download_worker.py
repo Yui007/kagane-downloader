@@ -38,7 +38,7 @@ class DownloadWorker(QThread):
         try:
             self.progress.emit(0, len(self.chapters), "Initializing browser...")
             self._browser = BrowserManager()
-            self._browser.init_browser()
+            self._browser.init_browser(headless=config.headless_mode)
             
             download_dir = Path(config.download_directory)
             download_dir.mkdir(parents=True, exist_ok=True)
