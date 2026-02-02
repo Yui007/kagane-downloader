@@ -302,7 +302,7 @@ def download_manga_flow():
     
     with console.status("[bold cyan]Initializing browser...[/]", spinner="dots"):
         browser = BrowserManager()
-        browser.init_browser()
+        browser.init_browser(headless=config.headless_mode)
     
     console.print("[green]✓[/] Browser initialized")
     
@@ -375,14 +375,15 @@ def settings_menu():
         table.add_row("6. Download Directory", config.download_directory)
         table.add_row("7. Enable Logs", "Yes" if config.enable_logs else "No")
         table.add_row("8. Image Load Delay", f"{config.image_load_delay}s")
-        table.add_row("9. Back to Main Menu", "-")
+        table.add_row("9. Headless Mode", "Yes" if config.headless_mode else "No")
+        table.add_row("10. Back to Main Menu", "-")
         
         console.print(table)
         
         choice = Prompt.ask(
             "[bold yellow]Select setting to modify[/]",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9"],
-            default="9"
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+            default="10"
         )
         
         if choice == "1":
@@ -431,6 +432,9 @@ def settings_menu():
             )
             
         elif choice == "9":
+            config.headless_mode = Confirm.ask("[cyan]Run in headless mode (hidden)?[/]", default=config.headless_mode)
+
+        elif choice == "10":
             save_config(config)
             console.print("[green]✓ Settings saved![/]")
             break
@@ -500,7 +504,7 @@ def download(
     
     with console.status("[bold cyan]Initializing browser...[/]", spinner="dots"):
         browser = BrowserManager()
-        browser.init_browser()
+        browser.init_browser(headless=config.headless_mode)
     
     console.print("[green]✓[/] Browser initialized")
     
