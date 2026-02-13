@@ -7,6 +7,15 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
+# Base URL for images
+IMAGE_BASE_URL = "https://yuzuki.kagane.org/api/v2/image"
+
+
+def get_image_url(image_id: str) -> str:
+    """Generate image URL from image ID"""
+    return f"{IMAGE_BASE_URL}/{image_id}"
+
+
 @dataclass
 class Genre:
     """Genre from API response"""
@@ -75,6 +84,13 @@ class SeriesCover:
     volume_number: Optional[str] = None
     language: str = ""
     note: Optional[str] = None
+    
+    @property
+    def url(self) -> str:
+        """Get the cover image URL"""
+        if self.image_id:
+            return get_image_url(self.image_id)
+        return ""
 
 
 @dataclass
@@ -136,6 +152,13 @@ class Series:
     series_covers: list[SeriesCover] = field(default_factory=list)
     series_links: list[SeriesLink] = field(default_factory=list)
     series_staff: list[SeriesStaff] = field(default_factory=list)
+    
+    @property
+    def cover_url(self) -> str:
+        """Get the cover image URL from the first cover"""
+        if self.series_covers and self.series_covers[0].image_id:
+            return self.series_covers[0].url
+        return ""
 
 
 # Parser functions to convert API JSON to dataclasses

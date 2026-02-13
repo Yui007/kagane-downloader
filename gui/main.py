@@ -76,7 +76,7 @@ class AppController(QObject):
             series.publication_status or series.upload_status or "",
             str(series.total_views or ""),
             str(series.current_books or len(series.series_books)),
-            "",  # Cover URL - will need separate handling
+            series.cover_url or "",  # Cover URL from series_covers
             genre_names,
             [book.chapter_no for book in series.series_books]
         )

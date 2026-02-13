@@ -274,18 +274,14 @@ def download_manga_flow():
 
 
 def download_chapters_api(series: Series, books: list[Book], config: Config):
-    """Download chapters using API-based approach"""
-    from src.scraper import BrowserManager, APIChapterDownloader, get_image_urls_from_browser
+    """Download chapters using API-based approach (sequential with browser restart per chapter)"""
+    import json
+    import time
+    from src.scraper import BrowserManager, APIChapterDownloader, get_reader_url
     from src.converter import create_pdf, create_cbz
     
     download_dir = Path(config.download_directory)
     download_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Initialize browser for capturing image URLs
-    console.print("\n[cyan]Initializing browser for image capture...[/]")
-    browser = BrowserManager()
-    browser.init_browser(headless=config.headless_mode, enable_network_logs=True)
-    driver = browser.get_driver()
     
     # Create downloader
     downloader = APIChapterDownloader(
@@ -296,100 +292,120 @@ def download_chapters_api(series: Series, books: list[Book], config: Config):
     
     results = []
     
-    try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console
-        ) as progress:
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console
+    ) as progress:
+        overall_task = progress.add_task(
+            f"[cyan]Downloading {len(books)} chapter(s)...",
+            total=len(books)
+        )
+        
+        for idx, book in enumerate(books):
+            progress.update(overall_task, description=f"[cyan]Loading Chapter {book.chapter_no}...")
             
-            overall_task = progress.add_task(
-                f"[cyan]Downloading {len(books)} chapter(s)...",
-                total=len(books)
-            )
+            # Create chapter directory
+            safe_title = downloader.sanitize_filename(series.title, max_length=50)
+            safe_chapter = downloader.sanitize_filename(f"Chapter_{book.chapter_no}_{book.title}", max_length=80)
+            chapter_dir = download_dir / safe_title / safe_chapter
+            chapter_dir.mkdir(parents=True, exist_ok=True)
             
-            for idx, book in enumerate(books):
-                progress.update(overall_task, description=f"[cyan]Loading Chapter {book.chapter_no}...")
+            # Initialize fresh browser for each chapter
+            browser = None
+            try:
+                browser = BrowserManager()
+                browser.init_browser(headless=config.headless_mode, enable_network_logs=True)
+                driver = browser.get_driver()
                 
-                # Create chapter directory
-                safe_title = downloader.sanitize_filename(series.title, max_length=50)
-                safe_chapter = downloader.sanitize_filename(f"Chapter_{book.chapter_no}_{book.title}", max_length=80)
-                chapter_dir = download_dir / safe_title / safe_chapter
-                chapter_dir.mkdir(parents=True, exist_ok=True)
+                # Navigate to reader page
+                reader_url = get_reader_url(series.series_id, book.book_id)
+                driver.get(reader_url)
                 
-                try:
-                    # Capture image URLs from browser
-                    image_urls = get_image_urls_from_browser(
-                        driver,
-                        series.series_id,
-                        book.book_id,
-                        wait_time=config.image_load_delay
-                    )
-                    
-                    if not image_urls:
-                        results.append((book, False, chapter_dir, 0))
-                        progress.update(overall_task, completed=idx + 1)
+                # Wait for images to load
+                time.sleep(config.image_load_delay)
+                
+                # Get network logs to extract image URLs
+                logs = driver.get_log("performance")
+                image_urls = set()
+                
+                for entry in logs:
+                    try:
+                        log = json.loads(entry["message"])["message"]
+                        if log["method"] == "Network.requestWillBeSent":
+                            url = log["params"]["request"]["url"]
+                            if "akari.kagane.org/api/v2/books/file/" in url:
+                                image_urls.add(url)
+                    except (json.JSONDecodeError, KeyError):
                         continue
-                    
-                    # Download images
-                    pages_downloaded = downloader.download_from_urls(
-                        image_urls, 
-                        chapter_dir,
-                        lambda c, t: progress.update(
-                            overall_task, 
-                            description=f"[cyan]Ch.{book.chapter_no}: {c}/{t} images"
-                        )
-                    )
-                    
-                    success = pages_downloaded > 0
-                    results.append((book, success, chapter_dir, pages_downloaded))
-                    
-                except Exception as e:
-                    if config.enable_logs:
-                        console.print(f"[red]Error downloading Ch.{book.chapter_no}: {e}[/]")
-                    results.append((book, False, chapter_dir, 0))
                 
-                progress.update(overall_task, completed=idx + 1)
-        
-        # Convert files if needed
-        if config.download_format in ("pdf", "cbz"):
-            with console.status(f"[cyan]Converting to {config.download_format.upper()}...[/]", spinner="dots"):
-                for book, success, chapter_dir, _ in results:
-                    if success and chapter_dir and chapter_dir.exists():
-                        try:
-                            if config.download_format == "pdf":
-                                create_pdf(chapter_dir, delete_images=not config.keep_images)
-                            elif config.download_format == "cbz":
-                                create_cbz(chapter_dir, series=series, book=book, delete_images=not config.keep_images)
-                        except Exception as e:
-                            if config.enable_logs:
-                                console.print(f"[red]Error converting Ch.{book.chapter_no}: {e}[/]")
-        
-        # Display results
-        console.print()
-        success_count = sum(1 for _, success, _, _ in results if success)
-        
-        if success_count == len(books):
-            console.print(Panel(
-                f"[bold green][OK] Successfully downloaded {success_count}/{len(books)} chapters![/]",
-                border_style="green"
-            ))
-        elif success_count > 0:
-            console.print(Panel(
-                f"[bold yellow][!] Downloaded {success_count}/{len(books)} chapters (some failed)[/]",
-                border_style="yellow"
-            ))
-        else:
-            console.print(Panel(
-                f"[bold red][X] Failed to download any chapters[/]",
-                border_style="red"
-            ))
-        
-    finally:
-        browser.close_browser()
-        downloader.close()
+                image_urls = list(image_urls)
+                
+                if not image_urls:
+                    results.append((book, False, chapter_dir, 0))
+                    progress.update(overall_task, completed=idx + 1)
+                    continue
+                
+                progress.update(overall_task, description=f"[cyan]Ch.{book.chapter_no}: Downloading {len(image_urls)} images...")
+                
+                # Download images
+                pages_downloaded = downloader.download_from_urls(image_urls, chapter_dir)
+                
+                success = pages_downloaded > 0
+                results.append((book, success, chapter_dir, pages_downloaded))
+                
+            except Exception as e:
+                if config.enable_logs:
+                    console.print(f"[red]Error downloading Ch.{book.chapter_no}: {e}[/]")
+                results.append((book, False, chapter_dir, 0))
+            
+            finally:
+                # Close browser after each chapter to clear network logs
+                if browser:
+                    try:
+                        browser.close_browser()
+                    except:
+                        pass
+            
+            progress.update(overall_task, completed=idx + 1)
+    
+    # Convert files if needed
+    if config.download_format in ("pdf", "cbz"):
+        with console.status(f"[cyan]Converting to {config.download_format.upper()}...[/]", spinner="dots"):
+            for book, success, chapter_dir, _ in results:
+                if success and chapter_dir and chapter_dir.exists():
+                    try:
+                        if config.download_format == "pdf":
+                            create_pdf(chapter_dir, delete_images=not config.keep_images)
+                        elif config.download_format == "cbz":
+                            create_cbz(chapter_dir, series=series, book=book, delete_images=not config.keep_images)
+                    except Exception as e:
+                        if config.enable_logs:
+                            console.print(f"[red]Error converting Ch.{book.chapter_no}: {e}[/]")
+    
+    # Display results
+    console.print()
+    success_count = sum(1 for _, success, _, _ in results if success)
+    
+    if success_count == len(books):
+        console.print(Panel(
+            f"[bold green][OK] Successfully downloaded {success_count}/{len(books)} chapters![/]",
+            border_style="green"
+        ))
+    elif success_count > 0:
+        console.print(Panel(
+            f"[bold yellow][!] Downloaded {success_count}/{len(books)} chapters (some failed)[/]",
+            border_style="yellow"
+        ))
+    else:
+        console.print(Panel(
+            f"[bold red][X] Failed to download any chapters[/]",
+            border_style="red"
+        ))
+    
+    downloader.close()
 
 
 def settings_menu():

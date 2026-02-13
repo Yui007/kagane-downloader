@@ -13,13 +13,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from config import get_config
 from src.scraper import Series, Book
-from src.scraper.api_downloader import APIChapterDownloader, get_image_urls_from_browser
+from src.scraper.api_downloader import APIChapterDownloader, get_reader_url
 from src.scraper.browser import BrowserManager
 from src.converter import create_pdf, create_cbz
 
 
 class DownloadWorker(QThread):
-    """Background worker for downloading chapters using API"""
+    """Background worker for downloading chapters using API (sequential)"""
     
     # Signals
     progress = pyqtSignal(int, int, str)  # current, total, message
@@ -31,22 +31,14 @@ class DownloadWorker(QThread):
         super().__init__(parent)
         self.series = series
         self.chapters = chapters
-        self._browser = None
         self._stop_requested = False
     
     def run(self):
-        """Run the download in background thread"""
+        """Run the download in background thread (sequential with browser restart per chapter)"""
         config = get_config()
         success_count = 0
         
         try:
-            self.progress.emit(0, len(self.chapters), "Initializing browser for image capture...")
-            
-            # Initialize browser with network logging
-            self._browser = BrowserManager()
-            self._browser.init_browser(headless=config.headless_mode, enable_network_logs=True)
-            driver = self._browser.get_driver()
-            
             # Create download directory
             download_dir = Path(config.download_directory)
             download_dir.mkdir(parents=True, exist_ok=True)
@@ -60,6 +52,7 @@ class DownloadWorker(QThread):
             
             results = []
             
+            # Process chapters sequentially with fresh browser per chapter
             for idx, book in enumerate(self.chapters):
                 if self._stop_requested:
                     break
@@ -72,28 +65,45 @@ class DownloadWorker(QThread):
                 chapter_dir = download_dir / safe_title / safe_chapter
                 chapter_dir.mkdir(parents=True, exist_ok=True)
                 
+                # Initialize fresh browser for each chapter
+                browser = None
                 try:
-                    # Capture image URLs from browser
-                    image_urls = get_image_urls_from_browser(
-                        driver,
-                        self.series.series_id,
-                        book.book_id,
-                        wait_time=config.image_load_delay
-                    )
+                    browser = BrowserManager()
+                    browser.init_browser(headless=config.headless_mode, enable_network_logs=True)
+                    driver = browser.get_driver()
+                    
+                    # Navigate to reader page
+                    reader_url = get_reader_url(self.series.series_id, book.book_id)
+                    driver.get(reader_url)
+                    
+                    # Wait for images to load
+                    time.sleep(config.image_load_delay)
+                    
+                    # Get network logs to extract image URLs
+                    logs = driver.get_log("performance")
+                    image_urls = set()
+                    
+                    for entry in logs:
+                        try:
+                            log = json.loads(entry["message"])["message"]
+                            if log["method"] == "Network.requestWillBeSent":
+                                url = log["params"]["request"]["url"]
+                                if "akari.kagane.org/api/v2/books/file/" in url:
+                                    image_urls.add(url)
+                        except (json.JSONDecodeError, KeyError):
+                            continue
+                    
+                    image_urls = list(image_urls)
                     
                     if not image_urls:
                         results.append((book, False, chapter_dir, 0))
                         self.chapterComplete.emit(book.chapter_no, False)
                         continue
                     
-                    self.progress.emit(idx, len(self.chapters), f"Downloading {len(image_urls)} images...")
+                    self.progress.emit(idx, len(self.chapters), f"Ch.{book.chapter_no}: Downloading {len(image_urls)} images...")
                     
                     # Download images
-                    def on_progress(current, total):
-                        if not self._stop_requested:
-                            self.progress.emit(idx, len(self.chapters), f"Ch.{book.chapter_no}: {current}/{total} images")
-                    
-                    pages_downloaded = downloader.download_from_urls(image_urls, chapter_dir, on_progress)
+                    pages_downloaded = downloader.download_from_urls(image_urls, chapter_dir)
                     
                     success = pages_downloaded > 0
                     results.append((book, success, chapter_dir, pages_downloaded))
@@ -102,6 +112,14 @@ class DownloadWorker(QThread):
                 except Exception as e:
                     results.append((book, False, chapter_dir, 0))
                     self.chapterComplete.emit(book.chapter_no, False)
+                
+                finally:
+                    # Close browser after each chapter to clear network logs
+                    if browser:
+                        try:
+                            browser.close_browser()
+                        except:
+                            pass
             
             # Convert files if needed
             if config.download_format in ("pdf", "cbz") and not self._stop_requested:
@@ -123,28 +141,14 @@ class DownloadWorker(QThread):
                 if success:
                     success_count += 1
             
-            self.progress.emit(len(self.chapters), len(self.chapters), "Closing browser...")
-            self._browser.close_browser()
-            self._browser = None
-            
             downloader.close()
             
             self.finished.emit(success_count, len(self.chapters))
             
         except Exception as e:
-            if self._browser:
-                try:
-                    self._browser.close_browser()
-                except:
-                    pass
             self.error.emit(str(e))
     
     def stop(self):
-        """Request stop and close browser"""
+        """Request stop"""
         self._stop_requested = True
-        if self._browser:
-            try:
-                self._browser.close_browser()
-            except:
-                pass
         self.terminate()
