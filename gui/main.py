@@ -17,7 +17,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, QUrl
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from gui.backend import ScraperWorker, DownloadWorker, SettingsBridge
-from src.scraper import MangaInfo, Chapter
+from src.scraper import Series, Book
 
 
 class AppController(QObject):
@@ -42,51 +42,54 @@ class AppController(QObject):
         super().__init__(parent)
         self._scraper_worker = None
         self._download_worker = None
-        self._current_manga = None
-        self._chapters = []
+        self._current_series = None
+        self._books = []
     
     @pyqtSlot(str)
     def fetchManga(self, url):
-        """Fetch manga info from URL"""
+        """Fetch manga info from URL using API"""
         if self._scraper_worker and self._scraper_worker.isRunning():
             return
         
         self.loadingStarted.emit()
         
         self._scraper_worker = ScraperWorker(url)
-        self._scraper_worker.finished.connect(self._on_manga_loaded)
+        self._scraper_worker.finished.connect(self._on_series_loaded)
         self._scraper_worker.error.connect(self._on_loading_error)
         self._scraper_worker.progress.connect(self._on_loading_progress)
         self._scraper_worker.start()
     
-    def _on_manga_loaded(self, manga: MangaInfo):
-        """Handle manga loaded"""
-        self._current_manga = manga
-        self._chapters = manga.chapters
+    def _on_series_loaded(self, series: Series):
+        """Handle series loaded from API"""
+        self._current_series = series
+        self._books = series.series_books
+        
+        # Get genre names
+        genre_names = [g.genre_name for g in series.genres if not g.is_spoiler]
         
         # Emit manga info to QML
         self.mangaLoaded.emit(
-            manga.title or "",
-            manga.author or "",
-            manga.description or "",
-            manga.source or "",
-            manga.status or "",
-            manga.views or "",
-            str(manga.total_chapters or len(manga.chapters)),
-            manga.cover_url or "",
-            manga.genres,
-            [ch.number for ch in manga.chapters]
+            series.title or "",
+            "",  # Author not directly available in API
+            series.description or "",
+            series.format or "",  # Source replaced with format
+            series.publication_status or series.upload_status or "",
+            str(series.total_views or ""),
+            str(series.current_books or len(series.series_books)),
+            "",  # Cover URL - will need separate handling
+            genre_names,
+            [book.chapter_no for book in series.series_books]
         )
         
         # Emit chapters as list of dicts
         chapters_data = []
-        for i, ch in enumerate(manga.chapters):
+        for i, book in enumerate(series.series_books):
             chapters_data.append({
                 'index': i,
-                'number': ch.number,
-                'title': ch.title,
-                'pages': ch.pages or "-",
-                'date': ch.date or "-",
+                'number': book.chapter_no,
+                'title': book.title,
+                'pages': str(book.page_count) if book.page_count else "-",
+                'date': book.created_at[:10] if book.created_at else "-",  # Just the date part
                 'selected': False
             })
         self.chaptersLoaded.emit(chapters_data)
@@ -107,12 +110,12 @@ class AppController(QObject):
         if self._download_worker and self._download_worker.isRunning():
             return
         
-        if not self._current_manga or not self._chapters:
+        if not self._current_series or not self._books:
             self.downloadError.emit("No manga loaded")
             return
         
         # Get selected chapters
-        selected = [self._chapters[i] for i in selected_indices if i < len(self._chapters)]
+        selected = [self._books[i] for i in selected_indices if i < len(self._books)]
         
         if not selected:
             self.downloadError.emit("No chapters selected")
@@ -120,7 +123,7 @@ class AppController(QObject):
         
         self.downloadStarted.emit()
         
-        self._download_worker = DownloadWorker(self._current_manga, selected)
+        self._download_worker = DownloadWorker(self._current_series, selected)
         self._download_worker.progress.connect(lambda c, t, m: self.downloadProgress.emit(c, t, m))
         self._download_worker.chapterComplete.connect(lambda n, s: self.downloadChapterComplete.emit(n, s))
         self._download_worker.finished.connect(lambda s, t: self.downloadFinished.emit(s, t))
