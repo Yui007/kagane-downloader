@@ -85,8 +85,13 @@ class BrowserManager:
         self._browser_pid = None
         self._chromedriver_pid = None
     
-    def init_browser(self, headless: bool = True) -> uc.Chrome:
-        """Initialize browser with undetected-chromedriver"""
+    def init_browser(self, headless: bool = True, enable_network_logs: bool = False) -> uc.Chrome:
+        """Initialize browser with undetected-chromedriver
+        
+        Args:
+            headless: Run browser in headless mode
+            enable_network_logs: Enable performance logs for capturing network requests
+        """
         # Close any existing browser first
         if self.driver:
             self.close_browser()
@@ -97,6 +102,10 @@ class BrowserManager:
         options.add_argument('--window-size=1920,1080')
         if headless:
             options.add_argument('--headless=new')
+        
+        # Enable performance logs for network capture
+        if enable_network_logs:
+            options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
         
         # Auto-detect Chrome version for compatibility
         chrome_version = get_chrome_version()
