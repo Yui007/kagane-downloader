@@ -18,7 +18,7 @@ from .api_client import KaganeAPIClient, APIConfig
 from .api_models import (
     Series, Book, Genre, Tag, AlternateTitle,
     Group, Uploader, SeriesCover, SeriesLink, SeriesStaff,
-    parse_series
+    parse_series, get_image_url, IMAGE_BASE_URL
 )
 from .api_scraper import KaganeScraper, fetch_series
 from .api_downloader import APIChapterDownloader, get_image_urls_from_browser, get_reader_url
@@ -44,6 +44,8 @@ __all__ = [
     "SeriesLink",
     "SeriesStaff",
     "parse_series",
+    "get_image_url",
+    "IMAGE_BASE_URL",
     "KaganeScraper",
     "fetch_series",
     "APIChapterDownloader",

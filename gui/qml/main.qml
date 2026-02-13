@@ -13,9 +13,14 @@ ApplicationWindow {
     color: "#1a1a2e"
     
     // Properties
-    property int currentScreen: 0  // 0: Download, 1: Settings, 2: About
+    property int currentScreen: 0  // 0: Browse, 1: Downloads, 2: Settings, 3: About
     property bool isLoading: false
     property bool isDownloading: false
+    
+    // Download tracking
+    property string downloadProgressMsg: ""
+    property int downloadCurrent: 0
+    property int downloadTotal: 0
     
     // Manga data
     property string mangaTitle: ""
@@ -73,16 +78,30 @@ ApplicationWindow {
         
         function onDownloadStarted() {
             isDownloading = true
+            downloadProgressMsg = "Starting download..."
+            downloadCurrent = 0
+            downloadTotal = 0
         }
         
         function onDownloadProgress(current, total, msg) {
             progressBar.value = total > 0 ? current / total : 0
             statusText.text = msg
+            downloadProgressMsg = msg
+            downloadCurrent = current
+            downloadTotal = total
         }
         
         function onDownloadFinished(success, total) {
             isDownloading = false
             statusText.text = "Downloaded " + success + "/" + total + " chapters"
+            // Add to history model
+            downloadHistoryModel.insert(0, {
+                title: mangaTitle,
+                success: success,
+                total: total,
+                time: new Date().toLocaleString(),
+                cover: mangaCover
+            })
         }
         
         function onDownloadError(error) {
@@ -94,6 +113,11 @@ ApplicationWindow {
     // Chapter list model
     ListModel {
         id: chapterModel
+    }
+    
+    // Download history model
+    ListModel {
+        id: downloadHistoryModel
     }
     
     // Main layout
@@ -132,9 +156,10 @@ ApplicationWindow {
                 // Nav buttons
                 Repeater {
                     model: [
-                        {icon: "📥", text: "Download", screen: 0},
-                        {icon: "⚙️", text: "Settings", screen: 1},
-                        {icon: "ℹ️", text: "About", screen: 2}
+                        {icon: "🔍", text: "Browse", screen: 0},
+                        {icon: "", text: "Downloads", screen: 1},
+                        {icon: "⚙️", text: "Settings", screen: 2},
+                        {icon: "ℹ️", text: "About", screen: 3}
                     ]
                     
                     Rectangle {
@@ -220,19 +245,20 @@ ApplicationWindow {
                 anchors.margins: 20
                 sourceComponent: {
                     switch(currentScreen) {
-                        case 0: return downloadScreen
-                        case 1: return settingsScreen
-                        case 2: return aboutScreen
-                        default: return downloadScreen
+                        case 0: return browseScreen
+                        case 1: return downloadsScreen
+                        case 2: return settingsScreen
+                        case 3: return aboutScreen
+                        default: return browseScreen
                     }
                 }
             }
         }
     }
     
-    // Download Screen Component
+    // Browse Screen Component
     Component {
-        id: downloadScreen
+        id: browseScreen
         
         ColumnLayout {
             spacing: 15
@@ -422,6 +448,48 @@ ApplicationWindow {
                             Item { Layout.fillWidth: true }
                             
                             Button {
+                                id: invertSortBtn
+                                text: "Invert Sort"
+                                
+                                background: Rectangle {
+                                    radius: 6
+                                    color: parent.hovered ? "#2a3f5f" : "transparent"
+                                    border.color: "#e94560"
+                                    border.width: 1
+                                }
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    font.pixelSize: 12
+                                    color: "#e94560"
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                                
+                                onClicked: {
+                                    // Collect all items with explicit properties
+                                    var items = []
+                                    for (var i = 0; i < chapterModel.count; i++) {
+                                        var item = chapterModel.get(i)
+                                        items.push({
+                                            index: item.index,
+                                            number: item.number,
+                                            title: item.title,
+                                            pages: item.pages,
+                                            date: item.date,
+                                            selected: item.selected
+                                        })
+                                    }
+                                    // Reverse the array
+                                    items.reverse()
+                                    // Clear and repopulate
+                                    chapterModel.clear()
+                                    for (var j = 0; j < items.length; j++) {
+                                        chapterModel.append(items[j])
+                                    }
+                                }
+                            }
+                            
+                            Button {
                                 property bool allSelected: false
                                 text: allSelected ? "Deselect All" : "Select All"
                                 
@@ -584,6 +652,251 @@ ApplicationWindow {
                         font.pixelSize: 16
                         color: "#a0a0a0"
                         Layout.alignment: Qt.AlignHCenter
+                    }
+                }
+            }
+        }
+    }
+    
+    // Downloads Screen Component
+    Component {
+        id: downloadsScreen
+        
+        ColumnLayout {
+            spacing: 20
+            
+            Text {
+                text: "Downloads"
+                font.pixelSize: 24
+                font.bold: true
+                color: "white"
+            }
+            
+            // Active Downloads Section
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: isDownloading ? 200 : 80
+                radius: 12
+                color: "#16213e"
+                
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 15
+                    spacing: 10
+                    
+                    RowLayout {
+                        spacing: 10
+                        
+                        Text {
+                            text: "⚡ Active Download"
+                            font.pixelSize: 16
+                            font.bold: true
+                            color: isDownloading ? "#e94560" : "#a0a0a0"
+                        }
+                        
+                        Rectangle {
+                            visible: isDownloading
+                            width: 8
+                            height: 8
+                            radius: 4
+                            color: "#4ade80"
+                            
+                            SequentialAnimation on opacity {
+                                running: isDownloading
+                                loops: Animation.Infinite
+                                NumberAnimation { from: 1.0; to: 0.3; duration: 500 }
+                                NumberAnimation { from: 0.3; to: 1.0; duration: 500 }
+                            }
+                        }
+                    }
+                    
+                    // Download progress content
+                    ColumnLayout {
+                        visible: isDownloading
+                        spacing: 8
+                        
+                        Text {
+                            text: mangaTitle
+                            font.pixelSize: 14
+                            color: "white"
+                            font.bold: true
+                        }
+                        
+                        Text {
+                            text: downloadProgressMsg
+                            font.pixelSize: 12
+                            color: "#a0a0a0"
+                        }
+                        
+                        RowLayout {
+                            spacing: 10
+                            
+                            ProgressBar {
+                                id: downloadProgressBar
+                                Layout.preferredWidth: 400
+                                from: 0
+                                to: downloadTotal
+                                value: downloadCurrent
+                                
+                                background: Rectangle {
+                                    implicitHeight: 8
+                                    radius: 4
+                                    color: "#2a3f5f"
+                                }
+                                
+                                contentItem: Item {
+                                    Rectangle {
+                                        width: downloadProgressBar.visualPosition * parent.width
+                                        height: parent.height
+                                        radius: 4
+                                        color: "#e94560"
+                                    }
+                                }
+                            }
+                            
+                            Text {
+                                text: downloadCurrent + " / " + downloadTotal
+                                font.pixelSize: 12
+                                color: "#e94560"
+                                font.bold: true
+                            }
+                        }
+                        
+                        Button {
+                            text: "Cancel"
+                            
+                            background: Rectangle {
+                                radius: 6
+                                color: parent.hovered ? "#d63850" : "#e94560"
+                            }
+                            
+                            contentItem: Text {
+                                text: parent.text
+                                font.pixelSize: 12
+                                color: "white"
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            
+                            onClicked: appController.stopDownload()
+                        }
+                    }
+                    
+                    // No active downloads message
+                    Text {
+                        visible: !isDownloading
+                        text: "No active downloads"
+                        font.pixelSize: 14
+                        color: "#a0a0a0"
+                    }
+                }
+            }
+            
+            // Download History Section
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                radius: 12
+                color: "#16213e"
+                
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 15
+                    spacing: 10
+                    
+                    Text {
+                        text: "📜 Download History"
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: "white"
+                    }
+                    
+                    ListView {
+                        id: historyListView
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        model: downloadHistoryModel
+                        spacing: 8
+                        
+                        delegate: Rectangle {
+                            width: historyListView.width
+                            height: 70
+                            radius: 8
+                            color: "#1a1a2e"
+                            
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 15
+                                anchors.rightMargin: 15
+                                spacing: 15
+                                
+                                // Cover thumbnail
+                                Rectangle {
+                                    width: 50
+                                    height: 60
+                                    radius: 4
+                                    color: "#2a3f5f"
+                                    clip: true
+                                    
+                                    Image {
+                                        anchors.fill: parent
+                                        source: model.cover || ""
+                                        fillMode: Image.PreserveAspectCrop
+                                        visible: model.cover !== ""
+                                    }
+                                    
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "📖"
+                                        font.pixelSize: 20
+                                        visible: !model.cover || model.cover === ""
+                                    }
+                                }
+                                
+                                // Info
+                                ColumnLayout {
+                                    spacing: 4
+                                    
+                                    Text {
+                                        text: model.title || "Unknown"
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        color: "white"
+                                        elide: Text.ElideRight
+                                        Layout.maximumWidth: 400
+                                    }
+                                    
+                                    Text {
+                                        text: model.success + " / " + model.total + " chapters"
+                                        font.pixelSize: 12
+                                        color: model.success === model.total ? "#4ade80" : "#fbbf24"
+                                    }
+                                    
+                                    Text {
+                                        text: model.time || ""
+                                        font.pixelSize: 11
+                                        color: "#a0a0a0"
+                                    }
+                                }
+                                
+                                Item { Layout.fillWidth: true }
+                                
+                                // Status icon
+                                Text {
+                                    text: model.success === model.total ? "✅" : "⚠️"
+                                    font.pixelSize: 20
+                                }
+                            }
+                        }
+                        
+                        // Empty state
+                        Text {
+                            anchors.centerIn: parent
+                            visible: downloadHistoryModel.count === 0
+                            text: "No download history yet"
+                            font.pixelSize: 14
+                            color: "#a0a0a0"
+                        }
                     }
                 }
             }
