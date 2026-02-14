@@ -23,11 +23,11 @@ from .api_models import (
 from .api_scraper import KaganeScraper, fetch_series
 from .api_downloader import APIChapterDownloader, get_image_urls_from_browser, get_reader_url
 
-# Legacy modules (deprecated - kept for backward compatibility)
-from .models import MangaInfo, Chapter
+# # Legacy modules (deprecated - kept for backward compatibility)
+# from .models import MangaInfo, Chapter
 from .browser import BrowserManager
-from .manga import MangaScraper
-from .downloader import ChapterDownloader
+# from .manga import MangaScraper
+# from .downloader import ChapterDownloader
 
 __all__ = [
     # New API-based (recommended)
@@ -52,9 +52,9 @@ __all__ = [
     "get_image_urls_from_browser",
     "get_reader_url",
     # Legacy (deprecated)
-    "MangaInfo",
-    "Chapter",
+    # "MangaInfo",
+    # "Chapter",
     "BrowserManager",
-    "MangaScraper",
-    "ChapterDownloader",
+    # "MangaScraper",
+    # "ChapterDownloader",
 ]

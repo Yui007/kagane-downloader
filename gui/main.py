@@ -85,7 +85,7 @@ class AppController(QObject):
         chapters_data = []
         for i, book in enumerate(series.series_books):
             chapters_data.append({
-                'index': i,
+                'bookIndex': i,
                 'number': book.chapter_no,
                 'title': book.title,
                 'pages': str(book.page_count) if book.page_count else "-",
@@ -114,8 +114,23 @@ class AppController(QObject):
             self.downloadError.emit("No manga loaded")
             return
         
+        # QML numbers can arrive as floats via QVariantList; normalize to valid int indices.
+        normalized_indices = []
+        for raw_index in selected_indices:
+            try:
+                idx = int(raw_index)
+            except (TypeError, ValueError):
+                continue
+            
+            # Reject fractional values instead of truncating.
+            if isinstance(raw_index, float) and not raw_index.is_integer():
+                continue
+            
+            if 0 <= idx < len(self._books):
+                normalized_indices.append(idx)
+        
         # Get selected chapters
-        selected = [self._books[i] for i in selected_indices if i < len(self._books)]
+        selected = [self._books[i] for i in normalized_indices]
         
         if not selected:
             self.downloadError.emit("No chapters selected")

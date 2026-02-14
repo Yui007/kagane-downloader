@@ -471,7 +471,7 @@ ApplicationWindow {
                                     for (var i = 0; i < chapterModel.count; i++) {
                                         var item = chapterModel.get(i)
                                         items.push({
-                                            index: item.index,
+                                            bookIndex: item.bookIndex,
                                             number: item.number,
                                             title: item.title,
                                             pages: item.pages,
@@ -619,7 +619,7 @@ ApplicationWindow {
                                 var selected = []
                                 for (var i = 0; i < chapterModel.count; i++) {
                                     if (chapterModel.get(i).selected) {
-                                        selected.push(i)
+                                        selected.push(chapterModel.get(i).bookIndex)
                                     }
                                 }
                                 appController.downloadChapters(selected)
