@@ -6,7 +6,7 @@ Captures image URLs from network requests and downloads them directly
 import re
 import json
 import time
-import requests
+from curl_cffi import requests
 from pathlib import Path
 from typing import Callable, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -71,7 +71,7 @@ class APIChapterDownloader:
         """Download a single image with retries"""
         for attempt in range(self.max_retries):
             try:
-                response = self.session.get(url, timeout=self.request_timeout, stream=True)
+                response = self.session.get(url, timeout=self.request_timeout, stream=True, impersonate="chrome110")
                 response.raise_for_status()
                 
                 # Determine file extension from content-type or URL

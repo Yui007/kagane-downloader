@@ -36,6 +36,20 @@ class ScraperWorker(QThread):
             series = self._scraper.get_series(self.url)
             
             if series.title:
+                # Download cover image as base64 to bypass Cloudflare in GUI
+                series.local_cover = series.cover_url
+                if series.cover_url:
+                    try:
+                        self.progress.emit("Downloading cover image...")
+                        from curl_cffi import requests
+                        import base64
+                        response = requests.get(series.cover_url, impersonate="chrome110", timeout=10)
+                        if response.status_code == 200:
+                            content_type = response.headers.get("content-type", "image/jpeg")
+                            b64_data = base64.b64encode(response.content).decode("utf-8")
+                            series.local_cover = f"data:{content_type};base64,{b64_data}"
+                    except Exception:
+                        pass
                 self.finished.emit(series)
             else:
                 self.error.emit("Failed to load series information")
