@@ -3,7 +3,7 @@ Kagane API Client
 Handles all HTTP communication with the Kagane API
 """
 
-import requests
+from curl_cffi import requests
 from typing import Optional, Any
 from dataclasses import dataclass
 
@@ -33,10 +33,10 @@ class KaganeAPIClient:
         
         for attempt in range(self.config.max_retries):
             try:
-                response = self.session.get(url, timeout=self.config.timeout)
+                response = self.session.get(url, timeout=self.config.timeout, impersonate="chrome110")
                 response.raise_for_status()
                 return response.json()
-            except requests.exceptions.RequestException as e:
+            except Exception as e:
                 if attempt == self.config.max_retries - 1:
                     raise
                 continue

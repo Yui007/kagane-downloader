@@ -143,6 +143,7 @@ class Series:
     total_books: Optional[int] = None
     edition_info: Optional[str] = None
     distribution: Optional[str] = None
+    local_cover: Optional[str] = None  # For GUI base64 cover image
     
     # Lists
     genres: list[Genre] = field(default_factory=list)
