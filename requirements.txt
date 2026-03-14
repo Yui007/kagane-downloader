@@ -5,3 +5,4 @@ pillow
 img2pdf
 PyQt6
 curl_cffi
+setuptools
