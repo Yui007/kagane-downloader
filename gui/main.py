@@ -4,17 +4,40 @@ Kagane Downloader - PyQt6 + QML GUI
 
 import sys
 import os
+import traceback
+from datetime import datetime
 from pathlib import Path
+
+# Log uncaught exceptions to a file for better debugging on silent crashes
+def log_uncaught_exceptions(ex_cls, ex_val, ex_tb):
+    error_msg = "".join(traceback.format_exception(ex_cls, ex_val, ex_tb))
+    print(error_msg, file=sys.stderr)
+    try:
+        log_file = Path(__file__).resolve().parent / "gui_error.log"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"\n[{datetime.now()}] Uncaught Exception:\n")
+            f.write(error_msg + "-" * 40 + "\n")
+    except:
+        pass
+
+sys.excepthook = log_uncaught_exceptions
 
 # Use Basic style to avoid Windows-specific control issues
 os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
 
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtQml import QQmlApplicationEngine
-from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, QUrl
+print("[DEBUG] Importing PyQt6 components...")
+try:
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtQml import QQmlApplicationEngine
+    from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, QUrl
+except ImportError as e:
+    print(f"[ERROR] Failed to import PyQt6: {e}")
+    sys.exit(1)
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add parent directory to path using absolute resolve
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
+print(f"[DEBUG] Root directory: {ROOT_DIR}")
 
 from gui.backend import ScraperWorker, DownloadWorker, SettingsBridge
 from src.scraper import Series, Book
@@ -160,14 +183,24 @@ class AppController(QObject):
 
 def main():
     """Main entry point"""
+    print("[DEBUG] Initializing QApplication...")
     app = QApplication(sys.argv)
     app.setApplicationName("Kagane Downloader")
     app.setOrganizationName("KaganeDownloader")
     
     # Create QML engine
+    print("[DEBUG] Initializing QQmlApplicationEngine...")
     engine = QQmlApplicationEngine()
     
+    # Connect engine warnings to console
+    def handle_qml_warnings(warnings):
+        for warning in warnings:
+            print(f"[QML WARNING] {warning.toString()}")
+    
+    engine.warnings.connect(handle_qml_warnings)
+    
     # Create and expose controllers
+    print("[DEBUG] Setting up context properties...")
     controller = AppController()
     settings = SettingsBridge()
     
@@ -175,13 +208,20 @@ def main():
     engine.rootContext().setContextProperty("settings", settings)
     
     # Load QML
-    qml_path = Path(__file__).parent / "qml" / "main.qml"
+    qml_path = Path(__file__).resolve().parent / "qml" / "main.qml"
+    print(f"[DEBUG] Loading QML from: {qml_path}")
+    
+    if not qml_path.exists():
+        print(f"[ERROR] QML file not found: {qml_path}")
+        sys.exit(-1)
+        
     engine.load(QUrl.fromLocalFile(str(qml_path)))
     
     if not engine.rootObjects():
-        print("Failed to load QML")
+        print("[ERROR] Failed to load QML: No root objects created.")
         sys.exit(-1)
     
+    print("[DEBUG] GUI started successfully.")
     sys.exit(app.exec())
 
 
