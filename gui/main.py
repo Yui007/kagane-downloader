@@ -38,9 +38,28 @@ except ImportError as e:
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 print(f"[DEBUG] Root directory: {ROOT_DIR}")
+sys.stdout.flush()
 
-from gui.backend import ScraperWorker, DownloadWorker, SettingsBridge
-from src.scraper import Series, Book
+print("[DEBUG] Importing gui.backend workers...")
+sys.stdout.flush()
+try:
+    from gui.backend import ScraperWorker, DownloadWorker, SettingsBridge
+except Exception as e:
+    print(f"[ERROR] Failed to import gui.backend: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+print("[DEBUG] Importing src.scraper models...")
+sys.stdout.flush()
+try:
+    from src.scraper import Series, Book
+except Exception as e:
+    print(f"[ERROR] Failed to import src.scraper: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+print("[DEBUG] All imports successful.")
+sys.stdout.flush()
 
 
 class AppController(QObject):
