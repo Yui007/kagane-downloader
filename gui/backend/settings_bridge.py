@@ -127,6 +127,16 @@ class SettingsBridge(QObject):
         self._config.headless_mode = value
         self._save()
 
+    # Use Legacy Headless
+    @pyqtProperty(bool, notify=settingsChanged)
+    def useLegacyHeadless(self):
+        return self._config.use_legacy_headless
+    
+    @useLegacyHeadless.setter
+    def useLegacyHeadless(self, value):
+        self._config.use_legacy_headless = value
+        self._save()
+
     @pyqtSlot()
     def reload(self):
         """Reload settings from file"""

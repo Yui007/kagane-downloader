@@ -25,6 +25,7 @@
 - ⚙️ **Configurable** - Customize download settings to your preference
 - 🚀 **Headless Mode** - Run without visible browser window
 - 💻 **CLI Support** - Full-featured command line interface
+- 🛑 **Legacy Headless Support** - Option to use older headless engine for better compatibility
 
 ## 🚀 Installation
 
@@ -63,6 +64,7 @@ python main.py download --url "https://kagane.org/series/..."
 | `image_load_delay` | Seconds to wait for images | `15` |
 | `max_retries` | Retry attempts for failed images | `3` |
 | `download_directory` | Where to save downloads | `downloads` |
+| `use_legacy_headless` | Use older headless engine | `false` |
 
 ## 📁 Project Structure
 

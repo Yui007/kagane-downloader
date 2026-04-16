@@ -432,14 +432,15 @@ def settings_menu():
         table.add_row("7. Max Concurrent Image Downloads", str(config.max_concurrent_images))
         table.add_row("8. Page Load Delay (seconds)", str(config.image_load_delay))
         table.add_row("9. Headless Mode", "Yes" if config.headless_mode else "No")
-        table.add_row("10. Back to Main Menu", "-")
+        table.add_row("10. Use Legacy Headless", "Yes" if config.use_legacy_headless else "No")
+        table.add_row("11. Back to Main Menu", "-")
         
         console.print(table)
         
         choice = Prompt.ask(
             "[bold yellow]Select setting to modify[/]",
-            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
-            default="10"
+            choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"],
+            default="11"
         )
         
         if choice == "1":
@@ -491,6 +492,9 @@ def settings_menu():
             config.headless_mode = Confirm.ask("[cyan]Run browser in headless mode (hidden)?[/]", default=config.headless_mode)
 
         elif choice == "10":
+            config.use_legacy_headless = Confirm.ask("[cyan]Use legacy headless mode (--headless)?[/]", default=config.use_legacy_headless)
+
+        elif choice == "11":
             save_config(config)
             console.print("[green][OK] Settings saved![/]")
             break

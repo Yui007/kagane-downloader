@@ -2,6 +2,7 @@
 Browser management using undetected-chromedriver
 """
 
+import time
 import subprocess
 import re
 import os
@@ -96,12 +97,21 @@ class BrowserManager:
         if self.driver:
             self.close_browser()
         
+        # Determine headless flag
+        headless_flag = "--headless=new"
+        try:
+            from config import get_config
+            if get_config().use_legacy_headless:
+                headless_flag = "--headless"
+        except ImportError:
+            pass
+
         options = uc.ChromeOptions()
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--window-size=1920,1080')
         if headless:
-            options.add_argument('--headless=new')
+            options.add_argument(headless_flag)
         
         # Enable performance logs for network capture
         if enable_network_logs:
@@ -109,12 +119,33 @@ class BrowserManager:
         
         # Auto-detect Chrome version for compatibility
         chrome_version = get_chrome_version()
-        if chrome_version:
-            console.print(f"[dim]Detected Chrome version: {chrome_version}[/]")
-            self.driver = uc.Chrome(options=options, use_subprocess=True, version_main=chrome_version, headless=headless)
-        else:
-            # Let undetected-chromedriver try its own detection
-            self.driver = uc.Chrome(options=options, use_subprocess=True, headless=headless)
+        
+        # Retry loop for browser initialization
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                if chrome_version:
+                    if attempt == 0:
+                        console.print(f"[dim]Detected Chrome version: {chrome_version}[/]")
+                    self.driver = uc.Chrome(options=options, use_subprocess=True, version_main=chrome_version, headless=headless)
+                else:
+                    # Let undetected-chromedriver try its own detection
+                    self.driver = uc.Chrome(options=options, use_subprocess=True, headless=headless)
+                
+                # CRITICAL: Wait for browser to stabilize and switch to first handle
+                # Fixes NoSuchWindowException reported by users
+                time.sleep(1.0)
+                if self.driver.window_handles:
+                    self.driver.switch_to.window(self.driver.window_handles[0])
+                
+                # If we got here, it succeeded
+                break
+            except Exception as e:
+                console.print(f"[yellow][!] Browser initialization attempt {attempt + 1} failed: {e}[/]")
+                if attempt == max_attempts - 1:
+                    console.print("[red][X] All browser initialization attempts failed.[/]")
+                    raise e
+                time.sleep(2)
         
         # Track PIDs for cleanup
         try:

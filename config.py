@@ -44,6 +44,9 @@ class Config:
 
     # Run browser in headless mode (hidden) or visible
     headless_mode: bool = False
+
+    # Use legacy headless mode (--headless) instead of new (--headless=new)
+    use_legacy_headless: bool = False
     
     def save(self) -> None:
         """Save configuration to file"""
