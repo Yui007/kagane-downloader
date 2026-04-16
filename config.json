@@ -1,0 +1,12 @@
+{
+  "download_format": "pdf",
+  "keep_images": true,
+  "max_concurrent_chapters": 3,
+  "max_concurrent_images": 5,
+  "max_display_chapters": 0,
+  "download_directory": "downloads",
+  "enable_logs": true,
+  "image_load_delay": 25,
+  "max_retries": 3,
+  "headless_mode": false
+}

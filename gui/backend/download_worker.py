@@ -2,29 +2,21 @@
 Download Worker - Background thread for downloading chapters using API
 """
 
-print("    [DEBUG] Importing sys, json, time...")
 import sys
 import json
 import time
 from pathlib import Path
-print("    [DEBUG] Importing PyQt6.QtCore...")
 from PyQt6.QtCore import QThread, pyqtSignal
 
 # Add parent directory to path to import src modules
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
-print("    [DEBUG] Importing config...")
 from config import get_config
-print("    [DEBUG] Importing src.scraper models...")
 from src.scraper import Series, Book
-print("    [DEBUG] Importing api_downloader...")
 from src.scraper.api_downloader import APIChapterDownloader, get_reader_url
-print("    [DEBUG] Importing browser logic...")
 from src.scraper.browser import BrowserManager
-print("    [DEBUG] Importing converter logic...")
 from src.converter import create_pdf, create_cbz
-print("    [DEBUG] DownloadWorker imported.")
 
 
 class DownloadWorker(QThread):

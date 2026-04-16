@@ -5,12 +5,6 @@ PDF generation from chapter images
 from pathlib import Path
 from typing import Optional
 
-print("      [DEBUG] Importing img2pdf...")
-import img2pdf
-print("      [DEBUG] Importing Pillow (PIL)...")
-from PIL import Image
-print("      [DEBUG] PDF converter dependencies imported.")
-
 
 def create_pdf(
     image_dir: Path, 
@@ -28,6 +22,9 @@ def create_pdf(
     Returns:
         Path to the created PDF file
     """
+    import img2pdf
+    from PIL import Image
+
     if output_path is None:
         output_path = image_dir.parent / f"{image_dir.name}.pdf"
     
