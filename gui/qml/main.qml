@@ -271,7 +271,7 @@ ApplicationWindow {
                 TextField {
                     id: urlInput
                     Layout.fillWidth: true
-                    placeholderText: "Enter kagane.org manga URL..."
+                    placeholderText: "Enter kagane.to manga URL..."
                     font.pixelSize: 14
                     color: "white"
                     
@@ -1144,7 +1144,7 @@ ApplicationWindow {
                 }
                 
                 Text {
-                    text: "A beautiful manga downloader for kagane.org"
+                    text: "A beautiful manga downloader for kagane.to"
                     font.pixelSize: 14
                     color: "#d0d0d0"
                     Layout.alignment: Qt.AlignHCenter

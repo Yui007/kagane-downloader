@@ -14,9 +14,9 @@ class KaganeScraper:
     """High-level scraper for Kagane using the API"""
     
     # Pattern to extract series ID from URL
-    # URLs like: https://kagane.org/series/019c2071-7760-7481-acf2-35d57d2912a9
+    # URLs like: https://kagane.to/series/019c2071-7760-7481-acf2-35d57d2912a9
     SERIES_URL_PATTERN = re.compile(
-        r'(?:https?://)?(?:www\.)?kagane\.org/series/([a-f0-9-]+)',
+        r'(?:https?://)?(?:www\.)?kagane\.to/series/([a-f0-9-]+)',
         re.IGNORECASE
     )
     
@@ -45,7 +45,7 @@ class KaganeScraper:
         Fetch series data from URL or ID.
         
         Args:
-            url_or_id: Either a full URL like https://kagane.org/series/xxx
+            url_or_id: Either a full URL like https://kagane.to/series/xxx
                       or just the series ID (UUID)
         
         Returns:

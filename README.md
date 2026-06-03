@@ -5,7 +5,7 @@
 <h1 align="center">🎴 Kagane Downloader</h1>
 
 <p align="center">
-  <b>A beautiful manga downloader for kagane.org</b>
+  <b>A beautiful manga downloader for kagane.to</b>
 </p>
 
 <p align="center">
@@ -52,7 +52,7 @@ python main.py
 
 ### Direct Download
 ```bash
-python main.py download --url "https://kagane.org/series/..."
+python main.py download --url "https://kagane.to/series/..."
 ```
 
 ## ⚙️ Configuration

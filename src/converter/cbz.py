@@ -126,7 +126,7 @@ def generate_comic_info_api(
     ET.SubElement(root, "PageCount").text = str(page_count)
     
     # Web (reader URL)
-    reader_url = f"https://kagane.org/series/{series.series_id}/reader/{book.book_id}"
+    reader_url = f"https://kagane.to/series/{series.series_id}/reader/{book.book_id}"
     ET.SubElement(root, "Web").text = reader_url
     
     # Manga reading direction

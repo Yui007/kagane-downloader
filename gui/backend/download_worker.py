@@ -82,15 +82,16 @@ class DownloadWorker(QThread):
                     
                     # Get network logs to extract image URLs
                     logs = driver.get_log("performance")
-                    image_urls = set()
+                    image_urls = []
                     
                     for entry in logs:
                         try:
                             log = json.loads(entry["message"])["message"]
                             if log["method"] == "Network.requestWillBeSent":
                                 url = log["params"]["request"]["url"]
-                                if "akari.kagane.org/api/v2/books/file/" in url:
-                                    image_urls.add(url)
+                                if "kstatic.to/api/v2/books/page/" in url:
+                                    if url not in image_urls:
+                                        image_urls.append(url)
                         except (json.JSONDecodeError, KeyError):
                             continue
                     

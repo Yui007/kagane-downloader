@@ -11,7 +11,7 @@ from dataclasses import dataclass
 @dataclass
 class APIConfig:
     """Configuration for the Kagane API"""
-    base_url: str = "https://yuzuki.kagane.org/api/v2"
+    base_url: str = "https://yuzuki.kagane.to/api/v2"
     timeout: int = 30
     max_retries: int = 3
 

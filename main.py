@@ -1,6 +1,6 @@
 """
 Kagane Downloader V2 - Beautiful Interactive CLI
-A manga downloader for kagane.org using the fast API
+A manga downloader for kagane.to using the fast API
 """
 
 import sys
@@ -30,7 +30,7 @@ APP_VERSION = "2.0.0"
 # Create Typer app
 app = typer.Typer(
     name="kagane",
-    help="Beautiful CLI manga downloader for kagane.org (API-based)",
+    help="Beautiful CLI manga downloader for kagane.to (API-based)",
     add_completion=False,
     rich_markup_mode="rich",
     invoke_without_command=True
@@ -207,7 +207,7 @@ def download_manga_flow():
     )
     
     if not url:
-        console.print("[red]Invalid URL. Please enter a kagane.org manga URL or series ID.[/]")
+        console.print("[red]Invalid URL. Please enter a kagane.to manga URL or series ID.[/]")
         return
     
     config = get_config()
@@ -329,15 +329,16 @@ def download_chapters_api(series: Series, books: list[Book], config: Config):
                 
                 # Get network logs to extract image URLs
                 logs = driver.get_log("performance")
-                image_urls = set()
+                image_urls = []
                 
                 for entry in logs:
                     try:
                         log = json.loads(entry["message"])["message"]
                         if log["method"] == "Network.requestWillBeSent":
                             url = log["params"]["request"]["url"]
-                            if "akari.kagane.org/api/v2/books/file/" in url:
-                                image_urls.add(url)
+                            if "kstatic.to/api/v2/books/page/" in url:
+                                if url not in image_urls:
+                                    image_urls.append(url)
                     except (json.JSONDecodeError, KeyError):
                         continue
                 
@@ -506,7 +507,7 @@ def settings_menu():
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
     """
-    Kagane Downloader V2 - Beautiful CLI manga downloader for kagane.org
+    Kagane Downloader V2 - Beautiful CLI manga downloader for kagane.to
     """
     # Only run interactive mode if no subcommand was invoked
     if ctx.invoked_subcommand is not None:

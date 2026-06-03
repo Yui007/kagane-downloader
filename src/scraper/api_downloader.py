@@ -31,11 +31,11 @@ class APIChapterDownloader:
     
     The approach:
     1. Open the reader page in a browser
-    2. Capture network requests to get image URLs from akari.kagane.org
+    2. Capture network requests to get image URLs from akari.kagane.to
     3. Download images directly using requests
     """
     
-    IMAGE_URL_PATTERN = "akari.kagane.org/api/v2/books/file/"
+    IMAGE_URL_PATTERN = "kstatic.to/api/v2/books/page/"
     
     def __init__(
         self,
@@ -54,7 +54,7 @@ class APIChapterDownloader:
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-            "Referer": "https://kagane.org/"
+            "Referer": "https://kagane.to/"
         })
     
     @staticmethod
@@ -131,7 +131,7 @@ class APIChapterDownloader:
         downloaded = 0
         
         # Sort URLs to maintain page order
-        sorted_urls = sorted(image_urls)
+        sorted_urls = image_urls
         
         with ThreadPoolExecutor(max_workers=self.max_concurrent_images) as executor:
             futures = {}
@@ -162,7 +162,7 @@ class APIChapterDownloader:
 
 def get_reader_url(series_id: str, book_id: str) -> str:
     """Generate the reader URL for a book"""
-    return f"https://kagane.org/series/{series_id}/reader/{book_id}"
+    return f"https://kagane.to/series/{series_id}/reader/{book_id}"
 
 
 def get_image_urls_from_browser(
