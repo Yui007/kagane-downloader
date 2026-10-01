@@ -8,7 +8,7 @@ from typing import Optional
 
 
 # Base URL for images
-IMAGE_BASE_URL = "https://yuzuki.kagane.to/api/v2/image"
+IMAGE_BASE_URL = "https://kagane.to/api/v2/image"
 
 
 def get_image_url(image_id: str) -> str:

@@ -420,7 +420,9 @@ def download_chapters_api(series: Series, books: list[Book], config: Config):
                     # Download images
                     pages_downloaded = downloader.download_from_urls(image_urls, chapter_dir)
                     
-                    success = pages_downloaded > 0
+                    # A partial chapter is not a successful download.
+                    expected = book.page_count or len(image_urls)
+                    success = len(image_urls) == expected and pages_downloaded == expected
                     results.append((book, success, chapter_dir, pages_downloaded))
                     
                 except Exception as e:
@@ -440,7 +442,7 @@ def download_chapters_api(series: Series, books: list[Book], config: Config):
     # Convert files if needed
     if config.download_format in ("pdf", "cbz"):
         with console.status(f"[cyan]Converting to {config.download_format.upper()}...[/]", spinner="dots"):
-            for book, success, chapter_dir, _ in results:
+            for result_index, (book, success, chapter_dir, pages) in enumerate(results):
                 if success and chapter_dir and chapter_dir.exists():
                     try:
                         if config.download_format == "pdf":
@@ -448,6 +450,7 @@ def download_chapters_api(series: Series, books: list[Book], config: Config):
                         elif config.download_format == "cbz":
                             create_cbz(chapter_dir, series=series, book=book, delete_images=not config.keep_images)
                     except Exception as e:
+                        results[result_index] = (book, False, chapter_dir, pages)
                         if config.enable_logs:
                             console.print(f"[red]Error converting Ch.{book.chapter_no}: {e}[/]")
     
@@ -472,6 +475,7 @@ def download_chapters_api(series: Series, books: list[Book], config: Config):
         ))
     
     downloader.close()
+    return results
 
 
 def settings_menu():
@@ -601,6 +605,40 @@ def main(ctx: typer.Context):
                 console.print(f"[red]Error: {e}[/]")
             else:
                 console.print("[red]An error occurred. Enable logs in settings for details.[/]")
+
+
+@app.command()
+def download(
+    url: str = typer.Option(..., '--url', help='Kagane series URL or ID'),
+    chapters: str = typer.Option('all', '--chapters', help='Exact chapter numbers, comma separated, or all'),
+    output: Optional[Path] = typer.Option(None, '--output', help='Download directory'),
+    format: str = typer.Option('cbz', '--format', help='images, pdf, or cbz'),
+    headless: bool = typer.Option(True, '--headless/--no-headless', help='Run without a visible browser')
+):
+    """Download chapters without interactive prompts."""
+    if format not in {'images', 'pdf', 'cbz'}:
+        raise typer.BadParameter('Choose images, pdf, or cbz', param_hint='--format')
+    config = get_config()
+    config.download_format = format
+    config.headless_mode = headless
+    if output is not None:
+        config.download_directory = str(output)
+    scraper = KaganeScraper()
+    try:
+        series = scraper.get_series(url)
+        selected = sorted(series.series_books, key=lambda book: (book.sort_no, book.book_id))
+        if chapters.lower() != 'all':
+            wanted = {number.strip() for number in chapters.split(',')}
+            selected = [book for book in selected if str(book.chapter_no) in wanted]
+            if wanted != {str(book.chapter_no) for book in selected}:
+                raise typer.BadParameter('Some requested chapter numbers were not found', param_hint='--chapters')
+        if not series.title or not selected:
+            raise typer.BadParameter('Series has no downloadable chapters', param_hint='--url')
+        results = download_chapters_api(series, selected, config)
+        if len(results) != len(selected) or not all(success for _, success, _, _ in results):
+            raise typer.Exit(1)
+    finally:
+        scraper.close()
 
 
 @app.command()

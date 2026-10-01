@@ -11,7 +11,7 @@ from dataclasses import dataclass
 @dataclass
 class APIConfig:
     """Configuration for the Kagane API"""
-    base_url: str = "https://yuzuki.kagane.to/api/v2"
+    base_url: str = "https://kagane.to/api/v2"
     timeout: int = 30
     max_retries: int = 3
 
@@ -37,6 +37,11 @@ class KaganeAPIClient:
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
+                # Authentication/security challenges need browser interaction,
+                # not repeated identical HTTP requests.
+                response = getattr(e, 'response', None)
+                if getattr(response, 'status_code', None) in {401, 403}:
+                    raise
                 if attempt == self.config.max_retries - 1:
                     raise
                 continue
