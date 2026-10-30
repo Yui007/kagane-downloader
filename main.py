@@ -1,6 +1,6 @@
 """
 Kagane Downloader V2 - Beautiful Interactive CLI
-A manga downloader for kagane.to using the fast API
+A manga downloader for kagane.moe using the fast API
 """
 
 import sys
@@ -30,7 +30,7 @@ APP_VERSION = "2.0.0"
 # Create Typer app
 app = typer.Typer(
     name="kagane",
-    help="Beautiful CLI manga downloader for kagane.to (API-based)",
+    help="Beautiful CLI manga downloader for kagane.moe (API-based)",
     add_completion=False,
     rich_markup_mode="rich",
     invoke_without_command=True
@@ -207,7 +207,7 @@ def download_manga_flow():
     )
     
     if not url:
-        console.print("[red]Invalid URL. Please enter a kagane.to manga URL or series ID.[/]")
+        console.print("[red]Invalid URL. Please enter a kagane.moe manga URL or series ID.[/]")
         return
     
     config = get_config()
@@ -274,16 +274,13 @@ def download_manga_flow():
 
 
 def download_chapters_api(series: Series, books: list[Book], config: Config):
-    """Download chapters using API-based approach (sequential with browser restart per chapter)"""
-    import json
-    import time
-    from src.scraper import BrowserManager, APIChapterDownloader, get_reader_url
+    """Download chapters directly through the API (no browser required)"""
+    from src.scraper import APIChapterDownloader
     from src.converter import create_pdf, create_cbz
     
     download_dir = Path(config.download_directory)
     download_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create downloader
     downloader = APIChapterDownloader(
         download_dir=download_dir,
         max_concurrent_images=config.max_concurrent_images,
@@ -292,18 +289,7 @@ def download_chapters_api(series: Series, books: list[Book], config: Config):
     
     results = []
     
-    browser = None
-    driver = None
     try:
-        # Initialize browser once for all chapters to avoid 25-30s startup / Cloudflare delay per chapter
-        try:
-            browser = BrowserManager()
-            browser.init_browser(headless=config.headless_mode, enable_network_logs=True)
-            driver = browser.get_driver()
-        except Exception as e:
-            if config.enable_logs:
-                console.print(f"[red]Failed to initialize browser: {e}[/]")
-                
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -325,131 +311,46 @@ def download_chapters_api(series: Series, books: list[Book], config: Config):
                 chapter_dir = download_dir / safe_title / safe_chapter
                 chapter_dir.mkdir(parents=True, exist_ok=True)
                 
-                if not driver:
-                    results.append((book, False, chapter_dir, 0))
-                    progress.update(overall_task, completed=idx + 1)
-                    continue
-                
                 try:
-                    # Navigate directly to reader page
-                    reader_url = get_reader_url(series.series_id, book.book_id)
-                    driver.get(reader_url)
-                    
-                    # Set localStorage preferences directly on reader page for preloading (for subsequent pages / fallback)
-                    try:
-                        driver.execute_script("""
-                            try {
-                                const key = 'kagane-user-preferences';
-                                const prefs = JSON.parse(localStorage.getItem(key) || '{}');
-                                prefs.preloadPagesEnabled = true;
-                                prefs.preloadMode = 'all';
-                                prefs.preloadPageCount = 100;
-                                prefs.readerPrefetchCount = 50;
-                                prefs.readerPrefetchDistance = 50;
-                                localStorage.setItem(key, JSON.stringify(prefs));
-                            } catch (e) {}
-                        """)
-                    except Exception:
-                        pass
-
-                    image_urls = []
-                    
-                    # Try to extract URLs directly from sessionStorage (extremely fast and ordered)
-                    start_time = time.time()
-                    while time.time() - start_time < 30:  # 30 seconds max wait to accommodate Turnstile bypass
-                        try:
-                            tokens_json = driver.execute_script("return sessionStorage.getItem('kagane_drm_tokens');")
-                            if tokens_json:
-                                tokens_data = json.loads(tokens_json)
-                                key = f"{series.series_id}:{book.book_id}"
-                                if key in tokens_data:
-                                    book_data = tokens_data[key]
-                                    token = book_data["token"]
-                                    cache_url = book_data.get("cacheUrl", "https://kstatic.to")
-                                    pages = book_data["pages"]
-                                    
-                                    # Construct all URLs directly in proper order
-                                    for p in sorted(pages, key=lambda x: x["page_no"]):
-                                        page_id = p["page_id"]
-                                        ext = p["ext"]
-                                        url = f"{cache_url}/api/v2/books/page/{book.book_id}/{page_id}.{ext}?token={token}"
-                                        image_urls.append(url)
-                                    break
-                        except Exception:
-                            pass
-                        time.sleep(0.5)
-                    
-                    # Fallback to scrolling and network logs if sessionStorage is unavailable
-                    if not image_urls:
-                        if config.enable_logs:
-                            console.print("[yellow][!] sessionStorage empty or failed. Falling back to scroll loop...[/]")
-                            
-                        # Scroll loop to trigger lazy loading
-                        try:
-                            page_count = driver.execute_script("return document.querySelectorAll('.page-container').length;") or book.page_count
-                            for page_num in range(1, page_count + 1):
-                                driver.execute_script(
-                                    "const el = document.querySelector('.page-container[data-page=\"' + arguments[0] + '\"]'); if (el) el.scrollIntoView({behavior: 'instant', block: 'center'});",
-                                    page_num
-                                )
-                                time.sleep(0.15)  # slightly slower to ensure requests trigger
-                        except Exception:
-                            pass
-                            
-                        time.sleep(config.image_load_delay)
+                    image_urls = downloader.get_page_urls(book.book_id)
+                    if image_urls:
+                        progress.update(overall_task, description=f"[cyan]Ch.{book.chapter_no}: Downloading {len(image_urls)} images...")
                         
-                        logs = driver.get_log("performance")
-                        for entry in logs:
-                            try:
-                                log = json.loads(entry["message"])["message"]
-                                if log["method"] == "Network.requestWillBeSent":
-                                    url = log["params"]["request"]["url"]
-                                    if "kstatic.to/api/v2/books/page/" in url:
-                                        if url not in image_urls:
-                                            image_urls.append(url)
-                            except (json.JSONDecodeError, KeyError):
-                                continue
-                    
-                    if not image_urls:
-                        results.append((book, False, chapter_dir, 0))
-                        progress.update(overall_task, completed=idx + 1)
-                        continue
-                    
-                    progress.update(overall_task, description=f"[cyan]Ch.{book.chapter_no}: Downloading {len(image_urls)} images...")
-                    
-                    # Download images
-                    pages_downloaded = downloader.download_from_urls(image_urls, chapter_dir)
-                    
-                    success = pages_downloaded > 0
+                        def on_image_progress(done: int, total: int, chapter_no: str = book.chapter_no):
+                            progress.update(
+                                overall_task,
+                                completed=idx + done / max(total, 1),
+                                description=f"[cyan]Ch.{chapter_no}: {done}/{total} images..."
+                            )
+                        
+                        pages_downloaded = downloader.download_from_urls(image_urls, chapter_dir, on_image_progress)
+                        success = pages_downloaded > 0
+                    else:
+                        pages_downloaded = 0
+                        success = False
                     results.append((book, success, chapter_dir, pages_downloaded))
-                    
                 except Exception as e:
                     if config.enable_logs:
                         console.print(f"[red]Error downloading Ch.{book.chapter_no}: {e}[/]")
                     results.append((book, False, chapter_dir, 0))
                 
                 progress.update(overall_task, completed=idx + 1)
+        
+        # Convert files if needed
+        if config.download_format in ("pdf", "cbz"):
+            with console.status(f"[cyan]Converting to {config.download_format.upper()}...[/]", spinner="dots"):
+                for book, success, chapter_dir, _ in results:
+                    if success and chapter_dir and chapter_dir.exists():
+                        try:
+                            if config.download_format == "pdf":
+                                create_pdf(chapter_dir, delete_images=not config.keep_images)
+                            elif config.download_format == "cbz":
+                                create_cbz(chapter_dir, series=series, book=book, delete_images=not config.keep_images)
+                        except Exception as e:
+                            if config.enable_logs:
+                                console.print(f"[red]Error converting Ch.{book.chapter_no}: {e}[/]")
     finally:
-        # Close browser once at the end of all downloads
-        if browser:
-            try:
-                browser.close_browser()
-            except:
-                pass
-    
-    # Convert files if needed
-    if config.download_format in ("pdf", "cbz"):
-        with console.status(f"[cyan]Converting to {config.download_format.upper()}...[/]", spinner="dots"):
-            for book, success, chapter_dir, _ in results:
-                if success and chapter_dir and chapter_dir.exists():
-                    try:
-                        if config.download_format == "pdf":
-                            create_pdf(chapter_dir, delete_images=not config.keep_images)
-                        elif config.download_format == "cbz":
-                            create_cbz(chapter_dir, series=series, book=book, delete_images=not config.keep_images)
-                    except Exception as e:
-                        if config.enable_logs:
-                            console.print(f"[red]Error converting Ch.{book.chapter_no}: {e}[/]")
+        downloader.close()
     
     # Display results
     console.print()
@@ -470,8 +371,6 @@ def download_chapters_api(series: Series, books: list[Book], config: Config):
             f"[bold red][X] Failed to download any chapters[/]",
             border_style="red"
         ))
-    
-    downloader.close()
 
 
 def settings_menu():
@@ -572,7 +471,7 @@ def settings_menu():
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
     """
-    Kagane Downloader V2 - Beautiful CLI manga downloader for kagane.to
+    Kagane Downloader V2 - Beautiful CLI manga downloader for kagane.moe
     """
     # Only run interactive mode if no subcommand was invoked
     if ctx.invoked_subcommand is not None:

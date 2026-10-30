@@ -19,7 +19,7 @@ ApplicationWindow {
     
     // Download tracking
     property string downloadProgressMsg: ""
-    property int downloadCurrent: 0
+    property real downloadCurrent: 0
     property int downloadTotal: 0
     
     // Manga data
@@ -271,7 +271,7 @@ ApplicationWindow {
                 TextField {
                     id: urlInput
                     Layout.fillWidth: true
-                    placeholderText: "Enter kagane.to manga URL..."
+                    placeholderText: "Enter kagane.moe manga URL..."
                     font.pixelSize: 14
                     color: "white"
                     
@@ -755,7 +755,7 @@ ApplicationWindow {
                             }
                             
                             Text {
-                                text: downloadCurrent + " / " + downloadTotal
+                                text: downloadTotal > 0 ? Math.round(downloadCurrent / downloadTotal * 100) + "%" : ""
                                 font.pixelSize: 12
                                 color: "#e94560"
                                 font.bold: true
@@ -1144,7 +1144,7 @@ ApplicationWindow {
                 }
                 
                 Text {
-                    text: "A beautiful manga downloader for kagane.to"
+                    text: "A beautiful manga downloader for kagane.moe"
                     font.pixelSize: 14
                     color: "#d0d0d0"
                     Layout.alignment: Qt.AlignHCenter

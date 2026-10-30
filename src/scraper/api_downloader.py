@@ -12,6 +12,7 @@ from typing import Callable, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
+from .api_client import KaganeAPIClient
 from .api_models import Book, Series
 
 
@@ -27,12 +28,12 @@ class DownloadResult:
 
 class APIChapterDownloader:
     """
-    Downloads chapter images using captured network URLs.
+    Downloads chapter images directly through the Kagane API.
     
     The approach:
-    1. Open the reader page in a browser
-    2. Capture network requests to get image URLs from akari.kagane.to
-    3. Download images directly using requests
+    1. Request a short-lived chapter access token from the API
+    2. Build the ordered page image URLs
+    3. Download images concurrently
     """
     
     IMAGE_URL_PATTERN = "kstatic.to/api/v2/books/page/"
@@ -54,8 +55,17 @@ class APIChapterDownloader:
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-            "Referer": "https://kagane.to/"
+            "Referer": "https://kagane.moe/",
+            "Origin": "https://kagane.moe",
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Dest": "image"
         })
+        self.api = KaganeAPIClient()
+    
+    def get_page_urls(self, book_id: str) -> list[str]:
+        """Fetch ordered page image URLs for a chapter from the API"""
+        return self.api.get_page_urls(book_id)
     
     @staticmethod
     def sanitize_filename(name: str, max_length: int = 80) -> str:
@@ -71,7 +81,7 @@ class APIChapterDownloader:
         """Download a single image with retries"""
         for attempt in range(self.max_retries):
             try:
-                response = self.session.get(url, timeout=self.request_timeout, stream=True, impersonate="chrome110")
+                response = self.session.get(url, timeout=self.request_timeout, stream=True, impersonate="chrome")
                 response.raise_for_status()
                 
                 # Determine file extension from content-type or URL
@@ -150,7 +160,8 @@ class APIChapterDownloader:
         return downloaded
     
     def close(self):
-        """Close the session"""
+        """Close the sessions"""
+        self.api.close()
         self.session.close()
     
     def __enter__(self):
@@ -162,7 +173,7 @@ class APIChapterDownloader:
 
 def get_reader_url(series_id: str, book_id: str) -> str:
     """Generate the reader URL for a book"""
-    return f"https://kagane.to/series/{series_id}/reader/{book_id}"
+    return f"https://kagane.moe/series/{series_id}/reader/{book_id}"
 
 
 def get_image_urls_from_browser(

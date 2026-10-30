@@ -17,6 +17,16 @@ console = Console()
 _active_browsers: list["BrowserManager"] = []
 
 
+class _SafeChrome(uc.Chrome):
+    """uc.Chrome calls quit() again from __del__ at shutdown, which can raise OSError."""
+
+    def __del__(self):
+        try:
+            super().__del__()
+        except Exception:
+            pass
+
+
 def _cleanup_all_browsers():
     """Cleanup function called on program exit"""
     for browser in _active_browsers[:]:
@@ -133,14 +143,14 @@ class BrowserManager:
                 # Attempt 2: Try without subprocess
                 if chrome_version and attempt == 0:
                     console.print(f"[dim]Detected Chrome version: {chrome_version}[/]")
-                    self.driver = uc.Chrome(
+                    self.driver = _SafeChrome(
                         options=options,
                         use_subprocess=use_sub,
                         version_main=chrome_version,
                         headless=headless
                     )
                 else:
-                    self.driver = uc.Chrome(
+                    self.driver = _SafeChrome(
                         options=options,
                         use_subprocess=use_sub,
                         headless=headless
@@ -240,7 +250,7 @@ class BrowserManager:
         return self.driver
     
     def close_ad_tabs(self) -> None:
-        """Close any tabs that are not kagane.to (ad tabs)"""
+        """Close any tabs that are not kagane.moe (ad tabs)"""
         if not self.driver:
             return
 
@@ -251,8 +261,8 @@ class BrowserManager:
                 self.driver.switch_to.window(handle)
                 current_url = self.driver.current_url
 
-                # Close if not kagane.to
-                if 'kagane.to' not in current_url:
+                # Close if not kagane.moe
+                if 'kagane.moe' not in current_url:
                     self.driver.close()
             except Exception:
                 pass

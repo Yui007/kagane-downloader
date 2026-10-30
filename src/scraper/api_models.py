@@ -8,7 +8,7 @@ from typing import Optional
 
 
 # Base URL for images
-IMAGE_BASE_URL = "https://yuzuki.kagane.to/api/v2/image"
+IMAGE_BASE_URL = "https://kagane.moe/api/v2/image"
 
 
 def get_image_url(image_id: str) -> str:
@@ -252,6 +252,17 @@ def parse_series_staff(data: dict) -> SeriesStaff:
     )
 
 
+def parse_books(data: dict) -> list[Book]:
+    """Parse the packed book list from /series/{id}/books/index"""
+    fields = data.get("fields", [])
+    books = []
+    for row in data.get("books", []):
+        item = dict(zip(fields, row))
+        item["created_at"] = item.get("published_on") or ""
+        books.append(parse_book(item))
+    return books
+
+
 def parse_series(data: dict) -> Series:
     """Parse complete series data from API response"""
     genres = [parse_genre(g) for g in data.get("genres", [])]
@@ -267,7 +278,7 @@ def parse_series(data: dict) -> Series:
         title=data.get("title", ""),
         description=data.get("description", ""),
         format=data.get("format", ""),
-        content_rating=data.get("content_rating", ""),
+        content_rating=data.get("content_rating") or data.get("age_rating", ""),
         publication_status=data.get("publication_status", ""),
         upload_status=data.get("upload_status", ""),
         original_language=data.get("original_language", ""),

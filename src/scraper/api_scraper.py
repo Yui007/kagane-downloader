@@ -7,16 +7,21 @@ import re
 from typing import Optional
 
 from .api_client import KaganeAPIClient, APIConfig
-from .api_models import Series, Book, parse_series
+from .api_models import Series, Book, parse_series, parse_books
 
 
 class KaganeScraper:
     """High-level scraper for Kagane using the API"""
     
-    # Pattern to extract series ID from URL
-    # URLs like: https://kagane.to/series/019c2071-7760-7481-acf2-35d57d2912a9
+    # URLs like: https://kagane.moe/series/omni-class-unlimited-awakening-019c2b2c-eaa0-7f30-ba25-61a2e4c4df0f
     SERIES_URL_PATTERN = re.compile(
-        r'(?:https?://)?(?:www\.)?kagane\.to/series/([a-f0-9-]+)',
+        r'(?:https?://)?(?:www\.)?kagane\.(?:to|moe|net|cx)/series/([^/?#]+)',
+        re.IGNORECASE
+    )
+    
+    # Series IDs are the trailing UUID of the URL slug
+    SERIES_ID_PATTERN = re.compile(
+        r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}',
         re.IGNORECASE
     )
     
@@ -25,27 +30,19 @@ class KaganeScraper:
     
     @classmethod
     def extract_series_id(cls, url: str) -> Optional[str]:
-        """Extract series ID from a Kagane URL"""
+        """Extract series ID from a Kagane URL or ID"""
         match = cls.SERIES_URL_PATTERN.search(url)
-        if match:
-            return match.group(1)
+        candidate = match.group(1) if match else url.strip()
         
-        # If it's already just a UUID, return it
-        uuid_pattern = re.compile(
-            r'^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$',
-            re.IGNORECASE
-        )
-        if uuid_pattern.match(url.strip()):
-            return url.strip()
-        
-        return None
+        id_match = cls.SERIES_ID_PATTERN.search(candidate)
+        return id_match.group(0) if id_match else None
     
     def get_series(self, url_or_id: str) -> Series:
         """
         Fetch series data from URL or ID.
         
         Args:
-            url_or_id: Either a full URL like https://kagane.to/series/xxx
+            url_or_id: Either a full URL like https://kagane.moe/series/xxx
                       or just the series ID (UUID)
         
         Returns:
@@ -56,7 +53,9 @@ class KaganeScraper:
             raise ValueError(f"Invalid series URL or ID: {url_or_id}")
         
         data = self.client.get_series(series_id)
-        return parse_series(data)
+        series = parse_series(data)
+        series.series_books = parse_books(self.client.get_books(series_id))
+        return series
     
     def get_books(self, url_or_id: str) -> list[Book]:
         """

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 @dataclass
 class APIConfig:
     """Configuration for the Kagane API"""
-    base_url: str = "https://yuzuki.kagane.to/api/v2"
+    base_url: str = "https://kagane.moe/api/v2"
     timeout: int = 30
     max_retries: int = 3
 
@@ -46,6 +46,43 @@ class KaganeAPIClient:
     def get_series(self, series_id: str) -> dict:
         """Get series information by ID"""
         return self._make_request(f"series/{series_id}")
+    
+    def get_books(self, series_id: str) -> dict:
+        """Get the packed chapter list for a series"""
+        return self._make_request(f"series/{series_id}/books/index?fields=List")
+    
+    def get_page_urls(self, book_id: str) -> list[str]:
+        """Get ordered page image URLs for a chapter"""
+        origin = self.config.base_url.replace("/api/v2", "")
+        
+        integrity = self.session.post(
+            f"{origin}/api/integrity",
+            timeout=self.config.timeout,
+            impersonate="chrome"
+        )
+        integrity.raise_for_status()
+        token = integrity.json()["token"]
+        
+        response = self.session.post(
+            f"{self.config.base_url}/books/{book_id}?intent=Read",
+            headers={
+                "Content-Type": "application/json",
+                "X-Integrity-Token": token
+            },
+            data="{}",
+            timeout=self.config.timeout,
+            impersonate="chrome"
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        cache_url = data.get("cache_url") or "https://kstatic.to"
+        access_token = data["access_token"]
+        pages = sorted(data["manifest"]["pages"], key=lambda page: page["page_no"])
+        return [
+            f"{cache_url}/api/v2/books/page/{book_id}/{page['page_id']}.{page['ext']}?token={access_token}"
+            for page in pages
+        ]
     
     def close(self):
         """Close the session"""
